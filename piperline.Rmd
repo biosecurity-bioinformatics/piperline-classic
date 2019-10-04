@@ -1,0 +1,794 @@
+---
+title: "pipeRline script for Hemiptera metabarcoding analysis"
+author: "Alexander Piper"
+date: "21/09/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+
+# Knitr global setup - change eval to true to run code
+
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE, eval=FALSE, fig.show = "hold", fig.keep = "all")
+opts_knit$set(root.dir = 'C:/Users/ap0y/Dropbox/Work Projects/PHD/Metabarcoding/Hemiptera_metabarcoding')
+opts_chunk$set(dev = 'png')
+```
+![Piperline](C:/Users/ap0y/Dropbox/Work Projects/PHD/Metabarcoding/Hemiptera_metabarcoding/piperline.png)
+
+
+# Introduction
+
+
+
+This is version 0.2 of the PipeRline metabarcoding analysis workflow, as implemented for the analysis of the Hemiptera metabarcoding data for PBCRC Natural Dispersal project #2153 
+
+A typical metabarcoding analysis retains tens to hundreds of millions of reads following quality filtering, and assigning taxonomy to each read individually can be a computationally intensive and lengthy process, taking multiple days on powerful computing clusters. To alleviate this computational burden, sequence dereplication (Traditionally OTU clustering) used to collapse similar sequences into distinct subgroups, each with a single representative sequence and an associated abundance or read count, enabling rapid downstream analysis using the representative rather than the full dataset. 
+
+A challenge of many OTU methods is that memory requirements and running time scale quadratically with sequencing depth, because these methods rely on pairwise comparisons between all sequencing reads. This pipeline is instead based around the DADA2 package (https://benjjneb.github.io/dada2/index.html) to perform the majority of the sequence read processing. DADA2 breaks this quadratic scaling by **processing samples independently**. This is possible because DADA2 infers exact sequence variants, and exact sequences are consistent labels that can be directly compared across separately processed samples. This isn’t the case for OTUs, as the boundaries and membership of de novo OTUs depend on the rest of the dataset and the arbitrary clustering threshold chosen, and thus are only valid and consistent when all sequences are pooled together for OTU picking.
+
+Separable sample processing allows DADA2’s running time to scale linearly in the number of samples, and its memory requirements to remain nearly flat. In addition, the most costly portion of the workflow is fully data parallelizable, and can be spread across non-interacting compute nodes such as the BASC system located at AgriBio.
+
+For biosecurity, decisions are made on species level taxonomy. For metabarcoding, the assignment of Linnaean taxonomy (species, genus etc.) is conducted through an automated classification approach. The main challenges that automated taxonomic classification faces is that all reference databases are by nature incomplete, and may also contain mis-annotated sequences. This can cause two problems, firstly Over-classification, or when query sequences are incorrectly assigned to the wrong species-level taxonomy due to the absence of reference data which can potentially lead to incorrect classification of previously un-sequenced but probably innocuous taxa as a known pest, due to the pest having an existing DNA barcode. And secondly under-classifciation where the algorithm is too conservative and the query is not assigned to taxonomy, resulting in the potential to miss a serious pest
+
+The PipeRline currently uses the RDP naive Bayesian classifier algorithm (as natively implementated in the DADA2 R Package) for assigning taxonomy. This classifier splits the query sequences into 8-mers and uses repeated random sampling of these 8-mers against the reference database to estimate the confidence of the query sequences inclusion into each taxonomic rank. In an ideal case, only a single possible taxonomic assignment will obtain a high level of probability, whereas alternate outcomes will obtain probabilities close to zero. In cases where there may be ambiguity due to imperfect reference data and multiple taxonomic outcomes obtain similar probabilities, the sequence may still be robustly assigned to a higher taxonomic rank (i.e. family), providing important information about sample composition and possible presence of novel taxa without over-classifying and producing false positives. 
+
+In the DADA2 package, the RDP classifier is called upon using the 'assignTaxonomy' function. This function takes as input a set of sequences to be classified and a training set of reference sequences with known taxonomy, and outputs taxonomic assignments with at least minBoot bootstrap confidence.
+
+Importantly, while the RDP classifier will assign taxonomy across multiple ranks (e.g. Kingdom to Genus), it will not assign species level taxonomy to the sequences. DADA2 therefore implements a second method, assignSpecies that uses exact string matching against a reference database to assign Genus species binomials ONLY if it is an unambiguous match.
+
+NOTE: This functionality was designed for 16s marker gene sequencing, where recent results indicate that exact matching (or 100% identity) with exact sequence variants is the only appropriate method for species-level assignment to high-throughput 16S amplicon data, however this is perhaps too conservative for the fast evolving COI gene. Therefore future versions of the PipeRline should explore alternative taxonomic assignment methods for species level taxonomy
+
+## Reference Databases
+
+the DADA2 creators maintain formatted reference databases for both Bacterial and Fungi classification: https://benjjneb.github.io/dada2/training.html however for COI you will need to use a custom database 
+
+For Kingdom to genus classification: assignTaxonomy(...) expects a training fasta file (or compressed fasta file) in which the taxonomy corresponding to each sequence is encoded in the id line in the following fashion (the second sequence is not assigned down to level 6):
+
+```{code}
+>Level1;Level2;Level3;Level4;Level5;Level6;
+ACCTAGAAAGTCGTAGATCGAAGTTGAAGCATCGCCCGATGATCGTCTGAAGCTGTAGCATGAGTCGATTTTCACATTCAGGGATACCATAGGATAC
+>Level1;Level2;Level3;Level4;Level5;
+CGCTAGAAAGTCGTAGAAGGCTCGGAGGTTTGAAGCATCGCCCGATGGGATCTCGTTGCTGTAGCATGAGTACGGACATTCAGGGATCATAGGATAC
+```
+
+For Species level classification: both assignSpecies(...) and addSpecies(...) expect the training data to be provided in the form of a fasta file (or compressed fasta file), with the id line formatted as follows:
+```{code}
+> ID Genus species
+ACCTAGAAAGTCGTAGATCGAAGTTGAAGCATCGCCCGATGATCGTCTGAAGCTGTAGCATGAGTCGATTTTCACATTCAGGGATACCATAGGATAC
+> ID Genus species
+CGCTAGAAAGTCGTAGAAGGCTCGGAGGTTTGAAGCATCGCCCGATGGGATCTCGTTGCTGTAGCATGAGTACGGACATTCAGGGATCATAGGATAC
+```
+
+Finally, following taxonomic assignment, both the sequence table and taxonomic table generated by DADA2 are passed to the Phyloseq package (https://joey711.github.io/phyloseq/) for further community analysis and visualisation of data. The phyloseq package is a tool to import, store, analyze, and graphically display complex phylogenetic sequencing data that has already been dereplicated into ESV's along with associated sample data, phylogenetic tree, and/or taxonomic assignment of the ESV's. The package leverages many of the tools available in R for ecology and phylogenetic analysis (vegan, ade4, ape, picante), while also using advanced/flexible graphic systems (ggplot2) to easily produce publication-quality graphics of complex phylogenetic data. phyloseq uses a specialized system of S4 classes to store all related phylogenetic sequencing data as single experiment-level object, making it easier to share data and reproduce analyses
+
+
+NOTE: Currently the functionality to track the amount of reads making it through each stage is not working, job for next version
+
+# Prior to analysis
+
+The PipeRline workflow assumes that your sequencing data meets certain criteria:
+
+1. Samples have been demultiplexed, i.e. split into individual per-sample fastq files.
+    + This is normally handled by the Illumina software (MiSeq), or Tracie Webster (HiSeq).
+2. For paired-end sequencing data, the forward and reverse fastq files contain reads in matched order.
+3. Non-biological nucleotides have been removed, e.g. primers, adapters, linkers, etc. 
+    + The illumina adapters will normally be removed during demultiplexing, however primer sequences will remain in the reads and must be removed prior to use with the DADA2 algorithm
+
+If you are using a gene such as COI that is not length variable you can use the trimLeft and TruncL function in the filter & Trim stage to remove remaining primers. However in this study there were 3 amplicons of different size generated in a multiplexed PCR, some of which were too short, and therefore contain 3' primer sequences in addition to the 5'primer
+
+Therefore, for this workflow we will be using an additional adapter trimming software BBDuk (Part of BBTools package https://jgi.doe.gov/data-and-tools/bbtools/) to trim the primers from our raw data files. “Duk” stands for Decontamination Using Kmers. BBDuk is capable of quality-trimming and filtering, adapter-trimming, contaminant-filtering via kmer matching.
+
+## Primers:            
+```{code}
+Name                    Illumina overhang adapter           Primer sequences
+Sterno18S_F2_tail		ACACTCTTTCCCTACACGACGCTCTTCCGATCT		ATGCATGTCTCAGTGCAAG 
+Sterno18S_R1_tail		GACTGGAGTTCAGACGTGTGCTCTTCCGATC 		TCGACAGTTGATAAGGCAGAC
+Sterno12S_F2_tail		ACACTCTTTCCCTACACGACGCTCTTCCGATCT		CAYCTTGACYTAACAT
+Sterno12S_R2_tail		GACTGGAGTTCAGACGTGTGCTCTTCCGATC			TAAAYYAGGATTAGATACCC
+SternoCOI_F1_tail		ACACTCTTTCCCTACACGACGCTCTTCCGATCT		ATTGGWGGWTTYGGAAAYTG
+SternoCOI_R1_tail		GACTGGAGTTCAGACGTGTGCTCTTCCGATC  		TATRAARTTRATWGCTCCTA
+```
+This step was currently handled externally to R using bash NOTE: Future improvement will be calling this script from within R
+
+```{bash bbduk trimming}
+mkdir cleaned
+ls | grep "R1_001.fastq.gz" | sort > test_ls_F
+ls | grep "R2_001.fastq.gz" | sort > test_ls_R
+
+let files=$(grep -c "fastq.gz" test_ls_F)
+
+declare -i x
+x=1
+
+
+while [ $x -le $files ] 
+	do
+
+queryF=$(sed -n "${x}p" test_ls_F)
+queryR=$(sed -n "${x}p" test_ls_R)
+
+sample_nameF=$(echo $queryF | awk -F . '{ print $1}')
+sample_nameR=$(echo $queryR | awk -F . '{ print $1}')
+
+#Need to set location of bbduk - on basc it is contained in my root ~/bbmap/bbduk.sh
+
+#Trim 3' primers from forward and reverse reads and any bases to the left
+~/bbmap/bbduk.sh in=$sample_nameF.fastq.gz in2=$sample_nameR.fastq.gz out=$sample_nameF.temp.fastq.gz out2=$sample_nameR.temp.fastq.gz literal=ATTGGWGGWTTYGGAAAYTG,TATRAARTTRATWGCTCCTA,ATGCATGTCTCAGTGCAAG,TCGACAGTTGATAAGGCAGAC,CAYCTTGACYTAACAT,TAAAYYAGGATTAGATACCC copyundefined k=14 ordered=t rcomp=f ktrim=l tbo tpe;
+
+#Trim 5' primers from forward and reverse reads and any bases to the right
+~/bbmap/bbduk.sh in=$sample_nameF.temp.fastq.gz in2=$sample_nameR.temp.fastq.gz out=./cleaned/$sample_nameF.trimmed.fastq.gz out2=./cleaned/$sample_nameR.trimmed.fastq.gz literal=GGGTATCTAATCCTRRTTTA,ATGTTARGTCAAGRTG copyundefined k=14 ordered=t rcomp=f ktrim=r tbo tpe;
+let x=x+1
+
+done 2> bbduk_primer_trimming_stats.txt
+rm *.temp.*
+
+```
+
+
+## Directory setup
+
+Large projects can span multiple sequencing runs, and because different runs can have different error profiles, it is recommended to learn the error rates for each run individually and then merge the sequence tables from each run together into a full-study sequence table.
+
+Sequences from these runs must cover the same gene region if you want to simply merge them together, otherwise the sequences aren’t directly comparable. In practice this means that the same primer sets and the same (or no) trimLeft value was used across runs. Single-reads must also be truncated to the same length (this is not necessary for overlapping paired-reads, as  truncLen doesn’t affect the region covered by the merged reads).
+
+In the PipeRline workflow, in order to not violate the above assumptions, these variables are standardised between each run by looping the analysis scripts over each run. The code to do this requires a specific directory structure for the project. Demultiplexed, per-sample, gzipped fastq files for the forward and reverse reads need to be contained in seperate subdirectories for each sequencing run, the subdirectories for each run need to be preceded by "run(n)_", and contained in the data directory. In addition, the string parsing used for sample names expects filenames of the following format: Forward: samplename_S1_L001_R1_001.trimmed.fastq.gz Reverse: samplename_S1_L001_R2_001.trimmed.fastq.gz  (Default for the AgriBio sequencing machines)
+
+## Recommended directory setup
+```{code}
+Project_folder/
+├── data/
+│   ├── run1_mock_samples/
+│   │     └── samplename_S1_L001_R1_001.trimmed.fastq.gz
+│   │     └── samplename_S1_L001_R2_001.trimmed.fastq.gz
+│   ├── run2_trap_samples/
+│   └── run3_test/
+├── scripts/
+│   ├── piperline.rmd
+│   └── other_scripts.R
+├─── sample_info/
+│    └── sample_info.csv
+├── output/
+│   ├── fig/
+│   ├── csv/
+│   └── rfiles/
+└─── doc
+    └── manuscript.doc/
+```
+    
+    
+#Fill out sample metadata files
+
+You can format the metadata file (which is in a compatible format to the QIIME1 mapping files) in a spreadsheet and validate the format using a google spreadsheet plugin as described on the QIIME2 website. The only required column is the sample id column, which should be first. All other columns should correspond to sample metadata. Below, we use the default filename of metadata.txt.
+    
+# DADA2 portion of workflow
+
+## Set up
+
+Install all necessary packages
+
+```{r install packages, message=FALSE, eval=FALSE}
+source("http://bioconductor.org/biocLite.R")
+biocLite()
+biocLite("dada2")
+biocLite("phyloseq")
+install.packages("ggplot2")
+install.packages("Matrix")
+biocLite("cpauvert/psadd")
+install.packages("tidyers")
+
+```
+
+Load all requried packages
+
+```{r load packages, message=FALSE, eval = TRUE }
+sapply(c("dada2", "phyloseq","ggplot2","ips", "DECIPHER", "data.table", "ggplot2", "tidyverse","Biostrings","ShortRead","scales", "psadd"), require, character.only = TRUE)
+
+```
+
+
+# Error visualisation
+
+We start by visualizing the quality profiles of the forward read and reverse reads for each run:
+
+```{r pre filter plot, eval=TRUE, cache= TRUE}
+runs <- dir("data/", pattern="run")
+
+for (i in seq(along=runs)){
+path <- paste0("data/",runs[i]) # CHANGE ME to the directory containing your demultiplexed forward-read fastq files
+
+fastqFs <- sort(list.files(path, pattern="R1_001.trimmed.fastq.gz", full.names = TRUE))
+fastqRs <- sort(list.files(path, pattern="R2_001.trimmed.fastq.gz", full.names = TRUE))
+print(plotQualityProfile(fastqFs[1:4]) + ggtitle(paste0(runs[i]," Forward Reads")))
+print(plotQualityProfile(fastqRs[1:4]) + ggtitle(paste0(runs[i]," Reverse Reads")))
+}
+```
+
+
+In gray-scale is a heat map of the frequency of each quality score at each base position. The median quality score at each position is shown by the green line, and the quartiles of the quality score distribution by the orange lines. The red line shows the scaled proportion of reads that extend to at least that position (this is more useful for other sequencing technologies, as Illumina reads are typically all the same lenghth, hence the flat red line).
+
+# Filter and trim
+
+The forward reads for the hemiptera metabarcoding data are of good quality. Normally it is advised to trim the last few nucleotides to avoid less well-controlled errors that can arise there. The reverse reads are of slightly worse worse quality, especially at the end, which is common in Illumina sequencing. This isn’t too worrisome, as DADA2 incorporates quality information into its error model which makes the algorithm robust to lower quality sequence, but trimming as the average qualities crash will improve the algorithm’s sensitivity to rare sequence variants. Informed by these profiles, reads can be truncated using truncLen=c(forwardlength, reverselength), however in the Hemiptera metabarcoding study there were 3 amplicons of different size generated in a multiplexed PCR, and therefore coarse measures like truncation cannot be applied, as they will impact the 3 amplicons differently. Instead we will use the Truncate quality function (TruncQ=2) to cut the reads at any point the Q score crashes below 2.
+
+
+```{r filter and trim}
+##Note - for filtering stage, these parameters may not be optimal for each run or testset, use the previous plotting step to inform this
+runs <- dir("data/", pattern="run")
+filtered_out <- list()
+
+for (i in seq(along=runs)){
+  path <- paste0("data/",runs[i]) # CHANGE ME to the directory containing your demultiplexed forward-read fastq files
+  filtpath <- file.path(path, "filtered") # Filtered forward files go into the path/filtered/ subdirectory
+  
+  fastqFs <- sort(list.files(path, pattern="R1_001.trimmed.fastq.gz"))
+  fastqRs <- sort(list.files(path, pattern="R2_001.trimmed.fastq.gz"))
+  
+  if(length(fastqFs) != length(fastqRs)) stop(paste0("Forward and reverse files for ",runs[i]," do not match."))
+  
+  filtered_out[[i]] <- (filterAndTrim(fwd=file.path(path, fastqFs), filt=file.path(filtpath, fastqFs),
+                                      rev=file.path(path, fastqRs), filt.rev=file.path(filtpath, fastqRs),
+                                      maxEE=c(2,5), truncQ=2, maxN = 2, minLen = 100,
+                                      rm.phix=TRUE, compress=TRUE, verbose=TRUE))
+}
+print(filtered_out)
+```
+
+
+
+## Post filtering error plotting
+
+sanity check to see the effects of the filter and trim step
+```{r Post filter plot, eval=TRUE, cache= TRUE}
+runs <- dir("data/", pattern="run")
+
+##Post filtering plotting
+for (i in seq(along=runs)){
+  path <- paste0("data/",runs[i]) # CHANGE ME to the directory containing your demultiplexed forward-read fastq files
+  filtpath <- file.path(path, "filtered") # Filtered forward files go into the path/filtered/ subdirectory
+  
+  
+  filtFs <- sort(list.files(filtpath, pattern="R1_001.trimmed.fastq.gz", full.names = TRUE))
+  filtRs <- sort(list.files(filtpath, pattern="R2_001.trimmed.fastq.gz", full.names = TRUE))
+  print(plotQualityProfile(filtFs[1:4]) + ggtitle(paste0(runs[i]," Forward Reads")))
+  print(plotQualityProfile(filtRs[1:4]) + ggtitle(paste0(runs[i]," Reverse Reads")))
+}
+
+```
+
+# Infer sequence variants
+
+Every amplicon dataset has a different set of error rates and the DADA2 algorithm makes use of a parametric error model (err) to model this and infer real biological sequence variation from error. The learnErrors method learns this error model from the data, by alternating estimation of the error rates and inference of sample composition until they converge on a jointly consistent solution. As in many machine-learning problems, the algorithm must begin with an initial guess, for which the maximum possible error rates in this data are used (the error rates if only the most abundant sequence is correct and all the rest are errors).
+
+Following error model learning, the core DADA2 algorthim dereplicates all identical sequencing reads are dereplicated into into “unique sequences” with a corresponding “abundance” equal to the number of reads with that unique sequence. The forward and reverse reads are then merged together by aligning the denoised forward reads with the reverse-complement of the corresponding reverse reads, and then constructing the merged “contig” sequences. By default, merged sequences are only output if the forward and reverse reads overlap by at least **12 bases**, and are identical to each other in the overlap region. 
+
+Following this step, a sequence variant table is constructed - a higher-resolution version of the OTU table produced by traditional methods.
+
+
+In order to handle bigger datasets, in this pipeline the samples are read in and processed within a for-loop, so only one sample is fully loaded into memory at a time. This keeps memory requirements quite low, and multiple MiSeq runs, or a Hiseq lane can be processed on 8GB of memory (although more is nice!).
+
+NOTE: Learning error rates is computationally intensive, as it requires multiple iterations of the core algorithm. Therefore if you are analysing a large dataset you can get the algorithm to only learn from a subset of the reads using (nbases = 1e8, randomize=TRUE) As a rule of thumb, a million 100nt reads (or 100M total bases) is more than adequate to learn the error rates.
+
+
+```{r Learn error rates }
+runs <- dir("data/", pattern="run")
+set.seed(100)
+
+for (i in seq(along=runs)){
+  path <- paste0("data/",runs[i]) # CHANGE ME to the directory containing your demultiplexed forward-read fastq files
+  filtpath <- file.path(path, "filtered") # Filtered forward files go into the path/filtered/ subdirectory
+  
+  filtFs <- list.files(filtpath, pattern="R1_001.trimmed.fastq.gz", full.names = TRUE)
+  filtRs <- list.files(filtpath, pattern="R2_001.trimmed.fastq.gz", full.names = TRUE)
+  
+  sample.names <- sapply(strsplit(basename(filtFs), "_"), `[`, 1) # Assumes filename = flowcell_samplename_XXX.fastq.gz
+  sample.namesR <- sapply(strsplit(basename(filtRs), "_"), `[`, 1) # Assumes filename = flowcell_samplename_XXX.fastq.gz
+  if(!identical(sample.names, sample.namesR)) stop("Forward and reverse files from run1 do not match.")
+  names(filtFs) <- sample.names
+  names(filtRs) <- sample.names
+  
+  # Learn error rates from samples
+  # nread tells the function how many reads to use in error learning, this can be increased for more accuracy at the expense of runtime
+  
+  errF <- learnErrors(filtFs, multithread=TRUE)
+  errR <- learnErrors(filtRs, multithread=TRUE)
+  ##Print error plots to see how well the algorithm modelled the errors in the different runs
+  print(plotErrors(errF, nominalQ=TRUE)+ ggtitle(paste0(runs[i]," Forward Reads")))
+  print(plotErrors(errR, nominalQ=TRUE)+ ggtitle(paste0(runs[i]," Reverse Reads")))
+  
+  
+  #Error inference and merger of reads
+  mergers <- vector("list", length(sample.names))
+  names(mergers) <- sample.names
+  for(sam in sample.names) {
+    cat("Processing:", sam, "\n")
+    derepF <- derepFastq(filtFs[[sam]])
+    ddF <- dada(derepF, err=errF, multithread=TRUE)
+    
+    derepR <- derepFastq(filtRs[[sam]])
+    ddR <- dada(derepR, err=errR, multithread=TRUE)
+    merger <- mergePairs(ddF, derepF, ddR, derepR) #, maxMismatch = 3
+    mergers[[sam]] <- merger
+  }
+  
+
+# Construct sequence table
+seqtab<- makeSequenceTable(mergers)
+saveRDS(seqtab, paste0(path,"/seqtab.rds")) # CHANGE ME to where you want sequence table saved
+}
+```
+
+While It can be worthwhile to plot the fit of error modelling before dereplication, i have found it works very well and only use it as a sanity check in this big-data version of sample inference. The error rates for each possible transition (A→C, A→G, …) are shown. Points are the observed error rates for each consensus quality score. The black line shows the estimated error rates after convergence of the machine-learning algorithm. The red line shows the error rates expected under the nominal definition of the Q-score. You should expect to see the estimated error rates (black line) fit well to the observed rates (points), and the error rates dropping with increased quality as expected. If this plot seems wildly off, it may be worth running the previous step again using the full dataset to learn errors if you are not already doing so, or make sure primers are correctly trimmed.
+ 
+# Merge Runs, Remove Chimeras
+
+Now that all of the individual run sequence tables are created, they are then merged into a full-study sequence table. The core dada method corrects substitution and indel errors, but chimeras remain. The frequency of chimeric sequences varies substantially from dataset to dataset, and depends on on factors including experimental procedures and sample complexity. Fortunately, the accuracy of the sequence variants after denoising makes identifying chimeras simpler than it is when dealing with fuzzy OTUs.  Chimeric sequences are identified and removed using removeBimeraDenovo if they can be exactly reconstructed by combining a left-segment and a right-segment from two more abundant “parent” sequences.The "consensus" chimera removal method works better on large studies, but the "pooled" method is also an option. Following chimera removal, any identical variants with the only difference being length variation are collapsed using collapseNoMismatch.
+
+
+```{r merge runs and remove chimeras}
+runs <- dir("data/", pattern="run")
+stlist <- vector()
+
+for (i in seq(along=runs)){
+  path <- paste0("data/",runs[i]) # CHANGE ME to the directory containing your demultiplexed forward-read fastq files
+  seqs <- list.files(path, pattern="seqtab.rds", full.names = TRUE)
+  
+  assign(paste("st", i, sep = ""),readRDS(seqs))
+  stlist <- append(stlist, paste("st", i, sep = ""), after=length(seqs))
+}
+
+st.all <- mergeSequenceTables(st1, st2, st3)
+
+st.all <- collapseNoMismatch(st.all, minOverlap = 20, orderBy = "abundance",
+                                    vec = TRUE, verbose = TRUE)
+seqtab.nochim <- removeBimeraDenovo(st.all, method="consensus", multithread=TRUE, verbose=TRUE)
+
+print(paste(sum(seqtab.nochim)/sum(st.all),"of the abundance remaining after chimera removal"))
+```
+
+# Assign taxonomy
+
+At this point we will assign kingdom to genus taxonomy to the sequence reads using the RDP classifier, and then add species level taxonomy to this using exact matching
+```{r assign taxonomy}
+# Assign Kingdom:Genus taxonomy using RDP classifier
+tax <- assignTaxonomy(seqtab.nochim, "reference/merged_arthropoda_rdp_genus.fa", multithread=TRUE, minBoot=80, outputBootstraps=FALSE)
+colnames(tax) <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus")
+
+##add species to taxtable using exact matching
+tax_plus <- addSpecies(tax, "reference/merged_arthropoda_rdp_species.fa", allowMultiple=TRUE)
+
+##Add SP. to species rank for those with only a genus rank assignmnet
+for(col in seq(7,ncol(tax_plus))) { 
+  propagate <- is.na(tax_plus[,col]) & !is.na(tax_plus[,col-1])
+  tax_plus[propagate,col:ncol(tax_plus)] <-  "spp."
+}
+
+##join genus and species name in species rank column
+sptrue <- !is.na(tax_plus[,7])
+tax_plus[sptrue,7] <- paste(tax_plus[sptrue,6],tax_plus[sptrue,7], sep=" ")
+
+#Check Output
+taxa.print <- tax_plus # Removing sequence rownames for display only
+rownames(taxa.print) <- NULL
+head(taxa.print)
+
+# Write dataset to disk
+
+saveRDS(seqtab.nochim, "data/seqtab_final.rds") # CHANGE ME to where you want sequence table saved
+saveRDS(tax_plus, "data/tax_boot80_final.rds") # CHANGE ME ...
+
+```
+
+
+# Make phyloseq 
+
+Following taxonomic assignment, both the sequence table and taxonomic table are passed to the Phyloseq R package for further community analysis and visualisation of data
+
+This involves loading in the sample info csv to merge with the sequence and taxonomy trables
+
+```{r create PS, eval = TRUE}
+seqtab.nochim <- readRDS("data/seqtab_final.rds") # CHANGE ME to where you want sequence table saved
+tax_plus <- readRDS("data/tax_boot80_final.rds") # CHANGE ME ...
+
+#Load sample information
+## ---- samdat ----
+samdf <- read.csv("sample_data/Sample_info.csv", header=TRUE) ###Change this
+#samdf$SampleID <- paste0(samdf$sample_name)
+samdf <- samdf[!duplicated(samdf$SampleID),] #Remove duplicate entries for reverse reads
+
+rownames(samdf) <- samdf$SampleID
+keep.cols <- c("collection_date", "biome", "target_gene", "feature",
+"sample_name" ,"SampleID","experimental_factor")
+samdf <- samdf[rownames(seqtab.nochim), keep.cols]
+
+## ---- phyloseq ----
+ps <- phyloseq(tax_table(tax_plus), sample_data(samdf),
+               otu_table(seqtab.nochim, taxa_are_rows = FALSE))
+##save phyloseq object
+saveRDS(ps, "data/ps_genus_spp_80.rds") 
+
+#Display samDF
+head(samdf)
+```
+
+# Add expected samples 
+
+To look at observed vs expected reads for our mock community, we add the expected read tables
+
+This basically loads a dummy sequence table, taxonomy table, and sample data table and merges it into the existing phyloseq object 
+
+
+```{r get expected , eval = TRUE}
+#Load expected information
+
+exp_seqtab <- as.matrix(read.csv("sample_data/expected/exp_seqtab.csv",row.names=1, header=TRUE))
+exp_taxtab <- as.matrix(read.csv("sample_data/expected/exp_taxtab.csv",row.names=1, header=TRUE))
+exp_samdf <- read.csv("sample_data/expected/exp_samdf.csv", header=TRUE)
+
+keep.cols <- c("collection_date", "biome", "target_gene", "feature",
+"sample_name" ,"SampleID","experimental_factor")
+rownames(exp_samdf) <- exp_samdf$SampleID
+exp_samdf <- exp_samdf[rownames(exp_seqtab), keep.cols]
+
+## Make phyloseq and merge
+ps_exp <- phyloseq(tax_table(exp_taxtab), sample_data(exp_samdf),
+               otu_table(exp_seqtab, taxa_are_rows = FALSE))
+
+```
+
+The below is a utility function to enable summarising of Phyloseq objects as easily readable summary tables
+
+```{r summary function, eval = TRUE}
+
+fast_melt = function(physeq){
+  # supports "naked" otu_table as `physeq` input.
+  otutab = as(otu_table(physeq), "matrix")
+  if(!taxa_are_rows(physeq)){otutab <- t(otutab)}
+  otudt = data.table(otutab, keep.rownames = TRUE)
+  setnames(otudt, "rn", "taxaID")
+  # Enforce character taxaID key
+  otudt[, taxaIDchar := as.character(taxaID)]
+  otudt[, taxaID := NULL]
+  setnames(otudt, "taxaIDchar", "taxaID")
+  # Melt count table
+  mdt = melt.data.table(otudt, 
+                        id.vars = "taxaID",
+                        variable.name = "SampleID",
+                        value.name = "count")
+  # Remove zeroes, NAs
+  mdt <- mdt[count > 0][!is.na(count)]
+  # Calculate relative abundance
+  mdt[, RelativeAbundance := count, by = SampleID]
+  if(!is.null(tax_table(physeq, errorIfNULL = FALSE))){
+    # If there is a tax_table, join with it. Otherwise, skip this join.
+    taxdt = data.table(as(tax_table(physeq, errorIfNULL = TRUE), "matrix"), keep.rownames = TRUE)
+    setnames(taxdt, "rn", "taxaID")
+    # Enforce character taxaID key
+    taxdt[, taxaIDchar := as.character(taxaID)]
+    taxdt[, taxaID := NULL]
+    setnames(taxdt, "taxaIDchar", "taxaID")
+    # Join with tax table
+    setkey(taxdt, "taxaID")
+    setkey(mdt, "taxaID")
+    mdt <- taxdt[mdt]
+  }
+  return(mdt)
+}
+
+summarize_taxa = function(physeq, Rank, GroupBy = NULL){
+  Rank <- Rank[1]
+  if(!Rank %in% rank_names(physeq)){
+    message("The argument to `Rank` was:\n", Rank,
+            "\nBut it was not found among taxonomic ranks:\n",
+            paste0(rank_names(physeq), collapse = ", "), "\n",
+            "Please check the list shown above and try again.")
+  }
+  if(!is.null(GroupBy)){
+    GroupBy <- GroupBy[1]
+    if(!GroupBy %in% sample_variables(physeq)){
+      message("The argument to `GroupBy` was:\n", GroupBy,
+              "\nBut it was not found among sample variables:\n",
+              paste0(sample_variables(physeq), collapse = ", "), "\n",
+              "Please check the list shown above and try again.")
+    }
+  }
+  # Start with fast melt
+  mdt = fast_melt(physeq)
+  if(!is.null(GroupBy)){
+    # Add the variable indicated in `GroupBy`, if provided.
+    sdt = data.table(SampleID = sample_names(physeq),
+                     var1 = get_variable(physeq, GroupBy))
+    setnames(sdt, "var1", GroupBy)
+    # Join
+    setkey(sdt, SampleID)
+    setkey(mdt, SampleID)
+    mdt <- sdt[mdt]
+  }
+  # Summarize
+  summarydt = mdt[, list(totalRA = sum(RelativeAbundance)),
+                  by = c(Rank, GroupBy)]
+  return(summarydt)
+}
+```
+
+# Output table of results
+
+```{r output table, eval = TRUE}
+
+##Define transformation functions
+
+#Proportion function
+proportions = function(x){
+  xprop = (x / sum(x))
+  return(xprop)
+}
+##Transform data to proportions and set low proportions to zero
+filterfun = function(x){
+  xprop = (x / sum(x)) #Convert to proportions
+  xprop[xprop < (1e-4)] <- 0 ## remove taxa under 0.0001, which is 0.01%
+  return(xprop)
+}
+
+#Subset data to Athropoda only 
+ps1 = subset_taxa(ps, Phylum == "Arthropoda") 
+
+#Export raw data
+rawexport <- psmelt(ps1)
+write.csv(rawexport, file = "rawarthropod.csv")
+
+#Export proportion data
+ps2 <- transform_sample_counts(ps1, fun = proportions)
+
+sum_gen <- summarize_taxa(ps2, "Genus", "SampleID")
+sum_gen <- spread(sum_gen, key="SampleID", value="totalRA")
+write.csv(sum_gen, file = "allgenes_gen_totalsummary.csv")
+
+sum_sp <- summarize_taxa(ps2, "Species", "SampleID")
+sum_sp <- spread(sum_sp, key="SampleID", value="totalRA")
+write.csv(sum_sp, file = "allgenes_sp_totalsummary.csv")
+
+#Convert data to proportions and apply filter threshold
+psFR <- transform_sample_counts(ps1, fun = filterfun)
+psFR <- transform_sample_counts(ps1, fun = proportions)
+
+sum_filt <- summarize_taxa(psFR, "Species", "SampleID")
+sum_filt <- spread(sum_filt, key="SampleID", value="totalRA")
+write.csv(sum_filt, file = "allgenes_sp_filtsummary.csv")
+
+```
+
+
+# Plot for all genes merged
+
+All sections below this will be quite specific to the Hemiptera metabarcoding data, however you should be able to get a good idea from this.
+
+```{r Plot all genes, eval = TRUE}
+
+positions = c('Pool-01-100', 'Pool-02-100', 'Pool-03-100', 'Pool-04-100', 'Pool-05-100', 'Pool-06-500', 'Pool-07-500', 'Pool-08-500', 'Pool-09-500', 'Pool-10-500', 'Pool-11-1000', 'Pool-12-1000', 'Pool-13-1000', 'Pool-14-1000', 'Pool-15-1000', 'Pool-U1-250', 'Pool-U2-250', 'Pool-U3-250', 'Pool-U4-250', 'Pool-U5-250', 'Trap-01', 'Trap-02', 'Trap-03', 'Trap-04', 'Trap-05', 'Trap-06', 'Trap-07', 'Trap-08', 'Trap-09', 'Trap-10')
+
+#Merge in expecteds 
+pstemp <- merge_phyloseq(ps1, ps_exp)
+pstemp <- transform_sample_counts(pstemp, fun = filterfun) #Apply filter threhsold
+
+
+#Drop Kingdom column so we have 3 genes merged 
+tax_table(pstemp) <- tax_table(pstemp)[,2:7]
+
+
+#export <- psmelt(psFR)
+#write.csv(export, file = "filtered.csv")
+
+##Plot mock communties
+psmock = subset_samples(pstemp, biome == "Laboratory")
+psmock = filter_taxa(psmock, function(x) mean(x) > 0, TRUE)
+rm_c1 <-  c("Pool-C1-250","Pool-C2-250","Pool-C3-250","Pool-C4-250","Pool-C5-250")
+psmock <- subset_samples(psmock, sample_names(psmock)!=rm_c1)
+rm_c1_exp<- c("Pool-C1-250-exp","Pool-C2-250-exp","Pool-C3-250-exp","Pool-C4-250-exp","Pool-C5-250-exp")
+psmock <- subset_samples(psmock, sample_names(psmock)!=rm_c1_exp)
+psmock = tax_glom(psmock, "Species", NArm = TRUE)
+psmock <- transform_sample_counts(psmock, fun= proportions) # Reset scale to 1 following NArm
+
+mdf <- psmelt(psmock)
+p <- ggplot(mdf, aes_string(x= "SampleID", y="Abundance", fill= "Genus" ))
+p = p + geom_bar(stat = "identity", position = "stack", color = "NA")  
+p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
+p = p + ggtitle(paste0("Relative abundance of taxa for all genes in mock communities"))
+p = p + xlab("Mock Community") 
+p = p + scale_fill_brewer(type="div", palette="RdYlBu")
+p1 = p + facet_wrap(feature~sample_name, drop=TRUE, scales="free_x") + xlab("feature")+ theme(axis.text.x = element_blank())
+
+psreal = subset_samples(pstemp, experimental_factor != "Exp")
+psreal <- subset_samples(psreal, sample_names(psreal)!=rm_c1)
+
+psglom = tax_glom(psreal, "Species", NArm = TRUE)
+psglom <- transform_sample_counts(psglom, fun= proportions) # Reset scale to 1 following NArm
+p2 <- plot_heatmap(psglom, "NMDS", "bray", taxa.label="Species", title= paste0("All genes Heatmap Species level"), taxa.order="Order", trans=log_trans(2)) + scale_x_discrete(limits = positions)
+
+
+psglom2 = tax_glom(psreal, "Genus", NArm = TRUE)
+psglom2 <- transform_sample_counts(psglom2, fun= proportions) # Reset scale to 1 following NArm
+p3 <- plot_heatmap(psglom2, "NMDS", "bray", taxa.label="Genus", title= paste0("All genes Heatmap Genus level"), taxa.order="Order", trans=log_trans(2)) + scale_x_discrete(limits = positions)
+
+##Presence absense for each gene
+
+mdt = fast_melt(psFR)
+# Add the variable indicated in `GroupBy`, if provided.
+    sdt = data.table(SampleID = sample_names(psFR),
+                     var1 = get_variable(psFR, "SampleID"))
+    setnames(sdt, "var1", "SampleID")
+    # Join
+    setkey(sdt, SampleID)
+    setkey(mdt, SampleID)
+    mdt <- sdt[mdt]
+  # Summarize
+  summarydt = mdt[, list(totalRA = sum(RelativeAbundance)),
+                  by = c("Kingdom","Order","Family", "Genus","Species", "SampleID", "taxaID")]
+  summarydt <- summarydt[!is.na(summarydt$Species)]
+  summarydt$totalRA[summarydt$totalRA > 0] <- 1
+  
+  summarydt$totalRA <- replace(summarydt$totalRA,summarydt > 0, 1)
+  
+  summarydt$test <- paste(summarydt$Order,summarydt$Family,summarydt$Species,sep="_")
+  
+p4 <- ggplot(summarydt, aes(Kingdom, Species)) + geom_tile(aes(fill = totalRA),
+   colour = "White") + theme(legend.position="none") + coord_fixed(ratio=.5) + theme(axis.text.x = element_text(angle = -90, hjust = 0)) 
+
+
+pdf(file= "allgenes_plots.pdf", paper="a4")
+plot(p1)
+plot(p2)
+plot(p3)
+plot(p4)
+dev.off()
+```
+
+
+# Plot each gene seperately
+
+NEED TO CHECK, IS THIS CURRENTLY USING THE FILTERED DATA???
+
+```{r Seperate genes}
+
+positions = c('Pool-01-100', 'Pool-02-100', 'Pool-03-100', 'Pool-04-100', 'Pool-05-100', 'Pool-06-500', 'Pool-07-500', 'Pool-08-500', 'Pool-09-500', 'Pool-10-500', 'Pool-11-1000', 'Pool-12-1000', 'Pool-13-1000', 'Pool-14-1000', 'Pool-15-1000', 'Pool-U1-250', 'Pool-U2-250', 'Pool-U3-250', 'Pool-U4-250', 'Pool-U5-250', 'Trap-01', 'Trap-02', 'Trap-03', 'Trap-04', 'Trap-05', 'Trap-06', 'Trap-07', 'Trap-08', 'Trap-09', 'Trap-10')
+
+genes <- unique(psmelt(ps) %>% select(Kingdom))
+genes <- as.vector(genes$Kingdom)
+genes <- genes[!is.na(genes)]
+
+for (i in seq(along=genes)){
+  ####PROBLEM HERE WILL BE THE MOCKS!
+print(genes[i])
+ps_gene = subset_taxa(ps, Kingdom == genes[i])
+ps_gene = subset_taxa(ps_gene, Phylum == "Arthropoda")
+
+ps_genexp <- merge_phyloseq(ps_gene, ps_exp)
+tax_table(ps_genexp) <- tax_table(ps_genexp)[,2:7]
+
+#Summary export
+summary <-  subset_samples(ps_genexp, experimental_factor == "O")
+gen_summary <- summarize_taxa(summary, "Genus", "SampleID")
+gen_summary <- spread(gen_summary, key="SampleID", value="totalRA")
+write.csv(gen_summary, file = paste0(genes[i],"_gen_summary.csv"))
+sp_summary <- summarize_taxa(summary, "Species", "SampleID")
+sp_summary <- spread(sp_summary, key="SampleID", value="totalRA")
+write.csv(sp_summary, file = paste0(genes[i],"_sp_summary.csv"))
+
+##Transform data to proportions and set low proportions to zero - NEEDED TO REMOVE INDEX SWITCHING
+
+psra_gene <- transform_sample_counts(ps_genexp, fun = filterfun)
+##Remove zero counts
+psra_gene = filter_taxa(psra_gene, function(x) mean(x) > 0, TRUE) #Used to be 1e-6
+
+##Figure  1 - Mock communities
+
+##Plot mock communties
+psmock_gene = subset_samples(psra_gene, biome == "Laboratory")
+psmock_gene = filter_taxa(psmock_gene, function(x) mean(x) > 0, TRUE)
+rm_c1 <-  c("Pool-C1-250","Pool-C2-250","Pool-C3-250","Pool-C4-250","Pool-C5-250")
+psmock_gene <- subset_samples(psmock_gene, sample_names(psmock_gene)!=rm_c1)
+rm_c1_exp<- c("Pool-C1-250-exp","Pool-C2-250-exp","Pool-C3-250-exp","Pool-C4-250-exp","Pool-C5-250-exp")
+psmock_gene <- subset_samples(psmock_gene, sample_names(psmock_gene)!=rm_c1_exp)
+psmock_gene = tax_glom(psmock_gene, "Species", NArm = TRUE)
+psmock_gene <- transform_sample_counts(psmock_gene, fun= proportions) # Reset scale to 1 following NArm
+
+
+mdf <- psmelt(psmock_gene)
+p <- ggplot(mdf, aes_string(x= "SampleID", y="Abundance", fill= "Genus" ))
+p = p + geom_bar(stat = "identity", position = "stack", color = "NA")  
+p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
+p = p + ggtitle(paste0("Relative abundance of taxa for ", genes[i], " in mock communities"))
+p = p + xlab("Mock Community") 
+p = p + scale_fill_brewer(type="div", palette="RdYlBu")
+p1 = p + facet_wrap(feature~sample_name, drop=TRUE, scales="free_x") + xlab("feature")+ theme(axis.text.x = element_blank())
+
+psreal_gene = subset_samples(psra_gene, experimental_factor != "Exp")
+psreal_gene <- subset_samples(psreal_gene, sample_names(psreal_gene)!=rm_c1)
+
+psglom = tax_glom(psreal_gene, "Species", NArm = TRUE)
+p2 <- plot_heatmap(psglom, "NMDS", "bray", taxa.label="Species", title= paste0(genes[i]," Heatmap Species level"), taxa.order="Order", trans=log_trans(2)) + scale_x_discrete(limits = positions)
+
+psglom2 = tax_glom(psreal_gene, "Genus", NArm = TRUE)
+p3 <- plot_heatmap(psglom2, "NMDS", "bray", taxa.label="Genus", title= paste0(genes[i]," Heatmap Genus level"), taxa.order="Order", trans=log_trans(2)) + scale_x_discrete(limits = positions)
+
+pdf(file= paste0(genes[i],"_plots.pdf"), paper="a4")
+plot(p1)
+plot(p2)
+plot(p3)
+dev.off()
+}
+```
+
+
+Plot just targets
+```{r}
+mock_pos = c('Pool-01-100', 'Pool-02-100', 'Pool-03-100', 'Pool-04-100', 'Pool-05-100', 'Pool-U1-250', 'Pool-U2-250', 'Pool-U3-250', 'Pool-U4-250', 'Pool-U5-250', 'Pool-06-500', 'Pool-07-500', 'Pool-08-500', 'Pool-09-500', 'Pool-10-500', 'Pool-11-1000', 'Pool-12-1000', 'Pool-13-1000', 'Pool-14-1000', 'Pool-15-1000')
+
+
+pstarget = subset_samples(psFR, biome == "Laboratory")
+pstarget = filter_taxa(pstarget, function(x) mean(x) > 0, TRUE)
+rm_c1 <-  c("Pool-C1-250","Pool-C2-250","Pool-C3-250","Pool-C4-250","Pool-C5-250")
+pstarget <- subset_samples(pstarget, sample_names(psmock)!=rm_c1)
+pstarget = tax_glom(pstarget, "Species", NArm = TRUE)
+pstarget <- transform_sample_counts(pstarget, fun= proportions) # Reset scale to 1 following NArm
+
+targets <- c("Diuraphis", "Bactericera")
+
+pstarget <- subset_taxa(pstarget, Genus==targets)
+
+mdf <- psmelt(pstarget)
+p <- ggplot(mdf, aes_string(x= "SampleID", y="Abundance", fill= "Genus" ))
+p = p + geom_bar(stat = "identity", position = "dodge", color = "NA")  
+p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
+p = p + ggtitle(paste0("Relative abundance of target taxa spiked into mock communites"))
+p = p + xlab("Mock Community") 
+p = p + geom_hline(yintercept=1e-4, linetype="dashed", color = "red")
+p6 = p + scale_x_discrete(limits = mock_pos)
+
+
+```
+
+# Krona chart
+
+Krona (https://github.com/marbl/Krona/wiki) allows hierarchical data, such as the results of taxonomic assignment, to be explored with zooming, multi-layered pie charts.
+
+Require Mac or UNIX OS, and install of 
+
+```{r plot krona chart}
+##Krona charts currently require unix OS
+
+plot_krona(psFR,"Per_trap_krona", "SampleID",trim=T)# Krona seperated by trap
+plot_krona(psFR,"All_trap_krona", "biome",trim=T) # Krona seperated by mock or real
+
+```
+![Krona Plot](C:/Users/ap0y/Dropbox/Work Projects/PHD/Metabarcoding/Hemiptera_metabarcoding/krona_example.png)
+
+```{r presence absense for each gene, include=FALSE}
+
+
+##Code for getting order for heatmaps
+RadialTheta <- function(x) {
+    
+    x <- as(x, "matrix")
+    theta <- atan2((x[, 2] - mean(x[, 2])), (x[, 1] - mean(x[, 1])))
+    names(theta) <- rownames(x)
+    
+    theta
+    
+}
+
+## ordination_object is the output of ordinate()
+glom_ordinate <- ordinate(psglom2, "NMDS", "bray")
+my_heatmap_order = order(RadialTheta(glom_ordinate$species))
+
+
+ rankcol = which(rank_names(physeq) %in% taxa.order)
+        taxmat = as(tax_table(physeq)[, 1:rankcol], "matrix")
+        taxa.order = apply(taxmat, 1, paste, sep = "", collapse = "")
+        names(taxa.order) <- taxa_names(physeq)
+        taxa.order = names(sort(taxa.order, na.last = TRUE))
+
+```
+
