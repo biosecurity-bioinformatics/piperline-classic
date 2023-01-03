@@ -1,0 +1,436 @@
+---
+title: "Tephritid metabarcoding workshop"
+subtitle: "Bioinformatic analysis"
+author: "Alexander M. Piper"
+date: "`r Sys.Date()`"
+output:
+  
+  html_document:
+    highlighter: null
+    theme: "flatly"
+    code_download: true
+    code_folding: show
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    df_print: paged    
+  pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+# Knitr global setup - change eval to true to run code
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(plotly)
+library(targets)
+library(tarchetypes)
+
+knitr::opts_chunk$set(echo = TRUE, eval=FALSE, message=FALSE, warning=FALSE, error=FALSE, fig.show = "hold", fig.keep = "all")
+opts_chunk$set(dev = 'png')
+source("R/themes.R")
+```
+
+# Introduction
+
+In this workshop we will be analysing 5 example samples from a previous batch of samples. 
+
+The morphological identification of these samples recorded the following species:
+
+```{r, eval=TRUE, echo=FALSE}
+trap_catches <- tibble::tribble(
+  ~Species, ~Trap1, ~Trap6, ~Trap7, ~Trap19, ~Trap20,
+ "B. aeroginosa", 0,0,0,1,0,
+ "B. alyxiae", 6,1,15,13,0,
+ "B. breviaculeus",9,5,18,8,0,
+ "B. bryoniae",1,65,35,15,7,
+ "B. erubescentis",52,0,0,0,0,
+ "B. frauenfeldi",158,164,192,783,0,
+ "B. neohumeralis",17,34,20,148,30,
+ "B. peninsularis",2,1,1,0,0,
+ "B. tenuifascia",1,0,0,0,0,
+ "B. tryoni",12,36,31,94,826,
+ "D. axanus",3,0,0,0,0,
+ "Z. choristus",0,0,0,1,0,
+ "Z. strigifinis",1,5,2,0,0
+)
+trap_catches%>%
+  kbl() %>%
+  kable_classic("hover", full_width = T)
+```
+
+And visually, the trap compositions identified through morphology look like this:
+
+```{r, eval=TRUE, echo=FALSE}
+plot <- trap_catches %>%
+  pivot_longer(-Species,
+               names_to="sample",
+               values_to="specimens") %>%
+  ggplot(aes(x = sample, y = specimens, fill=Species)) + 
+  geom_col() +
+  #scale_fill_brewer(palette="Set1")+
+  base_theme +
+  theme(legend.position = "right") +
+  labs(x = "Trap sample",
+       y = "Number of morphologically identified specimens") 
+
+ggplotly(plot)
+```
+
+# Set up for analysis
+
+## Install and load R packages and setup directories
+
+The first step is to install and load all necessary R packages required for the pipeline, as well as the FASTQC and BLAST+ command line software.
+
+```{r install and load, eval=TRUE, message=FALSE, warning=FALSE, error=FALSE, results=FALSE} 
+#Set required packages
+.cran_packages <- c(
+  "devtools",
+  "ggplot2",
+  "gridExtra",
+  "data.table",
+  "tidyverse", 
+  "stringdist",
+  "patchwork",
+  "vegan",
+  "seqinr",
+  "patchwork",
+  "stringi",
+  "magrittr",
+  "targets",
+  "tarchetypes",
+  "zen4R",
+  "fs"
+  )
+
+.bioc_packages <- c(
+  "phyloseq",
+  "DECIPHER",
+  "Biostrings",
+  "ShortRead",
+  "ggtree",
+  "savR",
+  "dada2",
+  "ngsReports"
+  )
+
+.inst <- .cran_packages %in% installed.packages()
+if(any(!.inst)) {
+   install.packages(.cran_packages[!.inst])
+}
+.inst <- .bioc_packages %in% installed.packages()
+if(any(!.inst)) {
+  if (!requireNamespace("BiocManager", quietly = TRUE)){
+    install.packages("BiocManager")
+  }
+  BiocManager::install(.bioc_packages[!.inst], ask = F)
+}
+
+#Load all published packages
+sapply(c(.cran_packages,.bioc_packages), require, character.only = TRUE)
+
+# Install and load github packages
+devtools::install_github("alexpiper/seqateurs", dependencies = TRUE)
+library(seqateurs)
+
+devtools::install_github("alexpiper/taxreturn", dependencies = TRUE)
+library(taxreturn)
+
+devtools::install_github("alexpiper/afdscraper", dependencies = TRUE)
+library(afdscraper)
+
+devtools::install_github("mikemc/speedyseq", dependencies = TRUE)
+library(speedyseq)
+
+#Install bbmap if its not in $path or in bin folder
+if(Sys.which("bbduk") == "" & !file.exists("bin/bbmap/bbduk.sh")){
+  seqateurs::bbmap_install(dest_dir = "bin")
+}
+
+#Install fastqc if its not in $path or in bin folder
+if(Sys.which("fastqc") == "" & !file.exists("bin/FastQC/fastqc")){
+  seqateurs::fastqc_install(dest_dir = "bin")
+}
+
+#Install BLAST if its not in $path or in bin folder
+if(Sys.which("blastn") == "" & (length(fs::dir_ls("bin", glob="*blastn.exe",recurse = TRUE)) ==0)){
+  taxreturn::blast_install(dest_dir = "bin")
+}
+
+source("R/dependencies.R")
+source("R/functions.R")
+source("R/themes.R")
+```
+
+## Create directory structure
+
+This step creates the required directory structure for the pipeline to run. 
+
+```{r}
+# Create directories
+if(!dir.exists("data")){dir.create("data", recursive = TRUE)}
+if(!dir.exists("reference")){dir.create("reference", recursive = TRUE)}
+if(!dir.exists("output/logs")){dir.create("output/logs", recursive = TRUE)}
+if(!dir.exists("output/results")){dir.create("output/results", recursive = TRUE)}
+if(!dir.exists("output/rds")){dir.create("output/rds", recursive = TRUE)}
+if(!dir.exists("sample_data")){dir.create("sample_data", recursive = TRUE)}
+if(!dir.exists("output/results/final")) {dir.create("output/results/final", recursive = TRUE)}
+if(!dir.exists("output/results/unfiltered")) {dir.create("output/results/unfiltered", recursive = TRUE)}
+if(!dir.exists("output/results/filtered")) {dir.create("output/results/filtered", recursive = TRUE)}
+```
+
+## Fetch sequencing reads
+
+Some test sequencing reads have been hosted on Zenodo for this workshop. The below code will download these and put them inside the data folder.
+
+```{r}
+# Create directory for data
+if(!dir.exists("data/K77JP")) {dir.create("data/K77JP", recursive = TRUE)}
+if(!dir.exists("data/K77JP/InterOp")) {dir.create("data/K77JP/InterOp", recursive = TRUE)}
+
+# Download files from zenodo
+download_zenodo(
+doi = "10.5281/zenodo.7112162",
+path = "data/K77JP"
+)
+
+# Move the interop files to the interop folder
+fs::dir_ls(path="data/K77JP", glob="*.bin") %>%
+  purrr::map(function(x){
+    fs::file_copy(path = x, new_path = x %>% str_replace("data/K77JP", "data/K77JP/InterOp"))
+    file.remove(x)
+  })
+```
+
+The directory structure should now look something like this:
+
+    root/
+    ├── data/
+    │   ├── K77JP/
+    │     ├── R1.fastq.gz
+    │     ├── R2.fastq.gz
+    │     ├── runInfo.xml
+    │     ├── runParameters.xml
+    │     ├── SampleSheet.csv
+    │     └── InterOp/
+    ├── sample_data/
+    ├── reference
+    ├── bin
+    ├── output/
+    └── doc/
+
+# Fetch reference files
+
+DOWNLOAD FROM ZENODO LINK!
+
+
+## Create sample sheet 
+
+In order to track samples and relevant QC statistics throughout the metabarcoding pipeline, we will first create a new samplesheet from our input samplesheets. This function requires both the SampleSheet.csv used for the sequencing run, and the runParameters.xml, both of which should have been automatically obtained from the demultiplexed sequencing run folder in the bash step above
+
+```{r create samplesheet, eval=TRUE}
+# Find all flowcell subdirectories within the data directory
+runs <- dir("data/")
+SampleSheet <- list.files(paste0("data/", runs), pattern= "SampleSheet", full.names = TRUE)
+runParameters <- list.files(paste0("data/", runs), pattern= "[Rr]unParameters.xml", full.names = TRUE)
+
+# Create samplesheet containing samples and run parameters for all runs
+samdf <- create_samplesheet(SampleSheet = SampleSheet, runParameters = runParameters, template = "V4") %>%
+  distinct()
+
+# Check if sampleids contain fcid, if not, attatch these
+samdf <- samdf %>%
+  mutate(sample_id = case_when(
+    !str_detect(sample_id, fcid) ~ paste0(fcid,"_",sample_id),
+    TRUE ~ sample_id
+  ))
+
+# Get a list of the fastq files
+fastqFs <- purrr::map(list.dirs("data", recursive=FALSE),
+                      list.files, pattern="_R1_", full.names = TRUE) %>%
+  unlist() %>%
+  str_remove(pattern = "^(.*)\\/") %>%
+  str_remove(pattern = "(?:.(?!_S))+$")
+fastqFs <- fastqFs[!str_detect(fastqFs, "Undetermined")]
+
+# Find those that are missing in th sample sheet
+if (length(setdiff(fastqFs, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(fastqFs, samdf$sample_id), " are not in the sample sheet") }
+
+# Find those samples in the samplesheet that don't have fastq files
+if (length(setdiff(samdf$sample_id, fastqFs)) > 0) {
+  warning(paste0("The fastq file: ",
+                 setdiff(samdf$sample_id, fastqFs),
+                 " is missing, dropping from samplesheet \n")) 
+  samdf <- samdf %>%
+    filter(!sample_id %in% setdiff(samdf$sample_id, fastqFs))
+}
+
+# Add PCR primers to sample sheet
+samdf <- samdf %>%
+  mutate(
+    pcr_primers = "fwhF2-fwhR2nDac;EIF3LminiF4-EIF3lminiR4",
+    for_primer_seq = "GGDACWGGWTGAACWGTWTAYCCHCC;GATGCGYCGTTATGCYGATGC",
+    rev_primer_seq = "GTRATWGCHCCIGCTAADACHGG;TTRAAYACTTCYARATCRCC"
+    )
+
+#Write out sample CSV for use in pipeline
+dir.create("sample_data")
+write_csv(samdf, "sample_data/Sample_info.csv")
+```
+
+The resulting sample data file should look like this:
+```{r, eval=TRUE, echo=FALSE}
+samdf %>%
+  head()%>%
+  kable() %>%
+  kable_classic("hover", full_width = T)
+```
+
+
+## Create parameters file
+
+The pipeline also requires a locus parameters file which lists important information about the target barcodes, as well as the PHMM model used to clean the loci, as well as the different reference databases that are to be used for taxonomic assignment.
+
+If multiple reference databases are to be used iteratively for assignment, they should be split with a semicolon, and in the order they are to be used for assignment.
+
+The below code generates the loci_params.csv file, however this can also be done in excel.
+
+
+```{r Create parameters file, eval=TRUE}
+params <- tibble(
+  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
+  target_gene=c("COI", "EIF3L"),
+  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
+  ref_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds","reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
+  blast_db = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz", "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
+  exp_length = c(205, 217),
+  genetic_code = c("SGC4", "SGC0"),
+  coding = c(TRUE, TRUE)
+)
+
+# Write out the parameters file
+write_csv(params, "sample_data/loci_params.csv")
+```
+
+The resulting table should look like this:
+```{r, eval=TRUE, echo=FALSE}
+params %>%
+  kable() %>%
+  column_spec(3, width = "1cm")%>%
+  column_spec(4, width = "1cm")%>%
+  column_spec(5, width = "1cm") %>%
+  kable_classic("hover", full_width = T)
+```
+
+
+# Run the pipeline
+
+Now that the sample data and parameters file is ready, its time to run the pipeline!
+
+## Visualise the pipeline steps
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, error=FALSE}
+# Visualise the planned targets pipeline
+tar_glimpse()
+```
+
+
+## Run the targets pipeline
+```{r}
+tar_make()
+```
+
+
+## Check quality control outputs
+
+There are a few important quality control plots that have been automatically created throughout the pipeline. These should be checked to ensure the sequencing run and analysis has run successfully:
+
+* Sequencing run quality check
+  + output/logs/K77JP/PFclusters.pdf
+  + output/logs/K77JP/Qscore_L1.pdf
+  + output/logs/K77JP/avg_intensity.pdf
+* Sample quality check
+  + output/logs/K77JP/FASTQC/ngsReports_Fastqc.html
+* Index-switching
+  + output/logs/K77JP/index_switching.pdf
+* Filtering plots
+  + output/logs/K77JP/prefilt_qualplots.pdf
+  + output/logs/K77JP/postfilt_qualplots.pdf
+* DADA2 error model
+  + output/logs/K77JP/fcid_errormodel.pdf
+* Reads surviving pipeline
+  + output/logs/K77JP/read_survival.pdf <span style="color:red">NOT WORKING</span>.
+
+
+# Analyse the results
+
+The outputs of the pipeline are an ASV table, taxonomy table, and sample data, as well as a phyloseq object containing these 3 components. these are located in the following directories
+
+* output/results/final/seqtab.csv
+* output/results/final/taxtab.csv
+* output/results/final/samdf.csv
+* output/rds/ps_filtered.rds
+
+
+## Read in data
+
+Here we read in the phyloseq object containing the ASV table, taxonomy table, and sample data
+```{r phyloseq, eval=TRUE}
+ps <- readRDS("output/rds/ps_filtered.rds")
+
+# Turn the phyloseq object into an R data frame, and apply 0.01% minimum abundance threshold
+summary_dat <- ps %>%
+  speedyseq::tax_glom(taxrank = "Species") %>% # Merges all ASVs assigned to the same species
+  speedyseq::psmelt()  %>% # Transforms to data frame
+  filter(Abundance > 0 )  %>%
+  dplyr::select(OTU, Sample, Abundance,pcr_primers, sample_id, sample_name, environment, collection_location, collection_date, fcid, rank_names(ps)) %>%
+  group_by(sample_id, pcr_primers) %>%
+  mutate_at(vars(Abundance), ~ . / sum(.) ) %>%
+  filter(Abundance > 1e-4) # Remove all under 0.01% abundance
+
+```
+
+
+## Heatmaps
+```{r heatmap, eval=TRUE}
+gg.heatmap <- summary_dat%>%
+  mutate(sample_name = factor(sample_name,levels=c("Trap1", "Trap6", "Trap7", "Trap19", "Trap20"))) %>%
+  ggplot(aes(x=sample_name, y=Species, fill=Abundance)) +
+    geom_tile() +
+    scale_fill_viridis_c(labels = scales::percent, na.value = NA, alpha=0.9) +
+    scale_y_discrete(limits=rev)+
+    base_theme+
+    theme(legend.position = "right",
+          axis.text.y = element_text(face="italic"),
+          axis.title.y = element_blank())+
+      labs(x="Sample",
+           y="Taxon",
+           fill="Relative abundance") +
+    facet_grid(~pcr_primers, drop=TRUE)
+
+ggplotly(gg.heatmap)
+```
+
+## Barplots
+```{r barplot, eval=TRUE}
+gg.barplot <- summary_dat%>%
+  mutate(sample_name = factor(sample_name,levels=c("Trap1", "Trap6", "Trap7", "Trap19", "Trap20"))) %>%
+  ggplot(aes(x=sample_name, y=Abundance, fill=Species)) +
+    geom_col(colour="black") +
+    #scale_fill_viridis_c(labels = scales::percent, na.value = NA, alpha=0.9) +
+    #scale_y_discrete(limits=rev)+
+    base_theme+
+    theme(legend.position = "none",
+          axis.text.y = element_text(face="italic"),
+          axis.title.y = element_blank())+
+      labs(x="Sample",
+           y="Taxon",
+           fill="Relative abundance") +
+    facet_grid(~pcr_primers, drop=TRUE)
+
+ggplotly(gg.barplot)
+```
