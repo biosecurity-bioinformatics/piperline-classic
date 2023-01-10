@@ -219,9 +219,8 @@ The directory structure should now look something like this:
     │     └── InterOp/
     ├── sample_data/
     ├── reference
-    ├── bin
     ├── output/
-    └── doc/
+    └── R/
 
 # Fetch reference files
 

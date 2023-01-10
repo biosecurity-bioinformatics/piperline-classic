@@ -1,5 +1,5 @@
 ---
-title: "iMapPESTS local metabarcoding workflow"
+title: "PipeRline"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
@@ -22,16 +22,25 @@ editor_options:
 ```{r setup, include=FALSE}
 # Knitr global setup - change eval to true to run code
 library(knitr)
+library(targets)
+library(tarchetypes)
+
 knitr::opts_chunk$set(echo = TRUE, eval=FALSE, message=FALSE,error=FALSE, fig.show = "hold", fig.keep = "all")
 opts_chunk$set(dev = 'png')
 ```
 
 # Clone the pipeRline github repository
 
-## Rstudio
+The first step is to clone this github repository, which contains the required code and directory structure to run the pipeline. If you are running the pipeline in Rstudio, it is best to create a new project from the github repository. This can be done by going **file > new project > version control > git** then adding https://github.com/alexpiper/piperline.git then change the name of the project to whatever you are working with. 
 
-## Command line
+Alternatively, the repository can be cloned using the command line, change the 'folder-name' to the desired name
+```{bash}
+# Change into the main directory you wish to make the project in
+cd metabarcoding
 
+# Clone the repository
+git clone https://github.com/alexpiper/piperline.git folder-name
+```
 
 # Prior to analysis
 The PipeRline workflow assumes that your sequencing data meets certain criteria:
@@ -348,8 +357,19 @@ write_csv(params, "sample_data/loci_params.csv")
 ```
 
 # Run pipeline {-}
-
 Now that the sample data sheet and parameters are defined, the pipeline can now be run.
+
+This pipeline is based around the targets package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
+
+## Visualise the pipeline steps
+
+```{r}
+# Visualise the planned targets pipeline
+tar_glimpse()
+```
+
+## Run the pipeline
+
 ```{r}
 tar_make()
 ```
