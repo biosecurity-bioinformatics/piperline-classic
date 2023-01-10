@@ -81,8 +81,7 @@ step_validate_folders <- function(project_dir){
        "output/results/unfiltered",
        "output/results/filtered",
        "output/rds",
-       "sample_data",
-       "temp") %>%
+       "sample_data") %>%
     purrr::map(normalizePath) %>%
     purrr::map(function(x){
       if(!dir.exists(x)){
@@ -624,22 +623,24 @@ step_read_filter <- function(sample_id, input_dir, output_dir, quiet=FALSE, ...)
   res <- dada2::filterAndTrim(
     fwd = fastqFs, filt = file.path(output_dir, basename(fastqFs)),
     rev = fastqRs, filt.rev = file.path(output_dir, basename(fastqRs)),
-    rm.phix = TRUE, multithread = FALSE, compress = TRUE, verbose = !quiet, ...) %>%
+    rm.phix = TRUE, multithread = FALSE, compress = TRUE, verbose = !quiet) %>% #, ...
     as_tibble() %>%
     dplyr::rename(filter_input = reads.in,
                   filter_output = reads.out) %>%
     mutate(fwd_out = file.path(output_dir, basename(fastqFs)),
            rev_out = file.path(output_dir, basename(fastqRs)))
-  
-  filtered_summary <- res %>% 
-    as.data.frame() %>%
-    tibble::rownames_to_column("sample") %>%
-    dplyr::mutate(reads_remaining = signif(((filter_output / filter_input) * 100), 2)) %>%
-    dplyr::filter(!is.na(reads_remaining))
-  
-  if (filtered_summary$reads_remaining < 10) {
-    message(paste0("WARNING: Less than 10% reads remaining for ",
-                   filtered_summary$sample), "Check filtering parameters ")
+
+  if(res$filter_output > 0){
+    filtered_summary <- res %>% 
+      as.data.frame() %>%
+      tibble::rownames_to_column("sample") %>%
+      dplyr::mutate(reads_remaining = signif(((filter_output / filter_input) * 100), 2)) %>%
+      dplyr::filter(!is.na(reads_remaining))
+    
+    if (filtered_summary$reads_remaining < 10) {
+      message(paste0("WARNING: Less than 10% reads remaining for ",
+                     filtered_summary$sample), "Check filtering parameters ")
+    }
   }
   return(res)
 }
@@ -1021,7 +1022,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
 
 # Group by target loci and apply
 step_assign_taxonomy <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
-                                 ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") ){
+                                 ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"), plot=FALSE){
   # Print arguments for testing
   # Load the relevent db
   trainingSet <- readRDS(normalizePath(database))
@@ -1033,30 +1034,39 @@ step_assign_taxonomy <- function(seqtab, output=NULL, qc_dir, database, threshol
   ids <- DECIPHER::IdTaxa(dna, trainingSet, processors=1, threshold = threshold, verbose=!quiet, strand = "top") 
   
   # Get the filename of that db that we can use to name the output files
-  db_name <- basename(database) %>% str_remove("_.*$")
+  db_name <- basename(database) %>% str_remove("\\..*$") %>% str_remove("_idtaxa")
   
   # Output plot of ids for each db
-  pdf(paste0(qc_dir,"/", db_name,"idtaxa.pdf"), width = 11, height = 8 , paper="a4r")
-  plot(ids)
-  try(dev.off(), silent=TRUE)
-  
-  #Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
-  tax <- t(sapply(ids, function(x) {
-    taxa <- paste0(x$taxon,"_", x$confidence)
-    taxa[startsWith(taxa, "unclassified_")] <- NA
-    taxa
-  })) %>%
-    purrr::map(unlist) %>%
-    stri_list2matrix(byrow=TRUE, fill=NA) %>%
-    magrittr::set_colnames(ranks) %>%
-    as.data.frame() %>%
-    magrittr::set_rownames(getSequences(seqtab)) %T>%
-    write.csv(paste0(qc_dir,"/", db_name,"idtaxa_results.csv")) %>%  #Write out logfile with confidence levels
-    mutate_all(str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
-    magrittr::set_rownames(getSequences(seqtab)) 
-
+  if(plot){
+    pdf(paste0(qc_dir,"/", db_name,"_idtaxa.pdf"), width = 11, height = 8 , paper="a4r")
+    plot(ids)
+    try(dev.off(), silent=TRUE)
+  }
+  # Check that more than just root has been assigned
+  if( any(sapply(ids, function(x){ length(x$taxon) }) > 2)){
+    
+    #Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
+    tax <- t(sapply(ids, function(x) {
+      taxa <- paste0(x$taxon,"_", x$confidence)
+      taxa[startsWith(taxa, "unclassified_")] <- NA
+      taxa
+    })) %>%
+      purrr::map(unlist) %>%
+      stri_list2matrix(byrow=TRUE, fill=NA) %>%
+      magrittr::set_colnames(ranks[1:ncol(.)]) %>%
+      as.data.frame() %>%
+      magrittr::set_rownames(getSequences(seqtab)) %T>%
+      write.csv(paste0(qc_dir,"/", db_name,"_idtaxa_results.csv")) %>%  #Write out logfile with confidence levels
+      mutate_all(str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
+      magrittr::set_rownames(getSequences(seqtab)) 
+  } else {
+    tax <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") 
+    tax[ranks[1]] <- ranks[1]
+    tax[ranks[2:length(ranks)]] <- NA_character_
+    tax <- tax %>%
+      magrittr::set_rownames(getSequences(seqtab)) 
+  }
   if(!is.null(output)){saveRDS(tax, output)}
-  
   return(tax)
 }
 
@@ -1076,25 +1086,33 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
     dplyr::rename(blast_genus = Genus, blast_spp = Species) %>%
     dplyr::filter(!is.na(blast_spp))
   
-  # Transform into taxtab format
-  out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
-    left_join(blast_spp %>%
-      dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
-    )%>%
-    column_to_rownames("OTU") %>%
-    as.matrix()
-  
+  if(nrow(blast_spp) > 0){
+    # Transform into taxtab format
+    out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
+      left_join(blast_spp %>%
+        dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
+      )%>%
+      column_to_rownames("OTU") %>%
+      as.matrix()
+  } else{
+    warning(paste0("No Species assigned with BLAST to ", database, " have you used the correct database?"))
+    out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
+      dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
+  }
   if(!is.null(output)){saveRDS(out, output)}
   return(out)
 }
 
 coalesce_tax <- function (x, y, suffix = c(".x", ".y"), prefer="left", join = dplyr::full_join, 
                           ...) {
-  x <- x %>%
-    as_tibble(rownames = "OTU")
-  y <- y %>%
-    as_tibble(rownames = "OTU")
-  
+  if(!"OTU" %in% colnames(x)){
+    x <- x %>%
+      as_tibble(rownames = "OTU")
+  }
+  if(!"OTU" %in% colnames(y)){
+    y <- y %>%
+      as_tibble(rownames = "OTU")
+  }
   joined <- join(x, y, by = "OTU", suffix = suffix, ...)
   cols <- union(names(x), names(y))
   to_coalesce <- names(joined)[!names(joined) %in% cols]
@@ -1174,11 +1192,34 @@ step_phangorn <- function(seqtab, output=NULL){
   
 }
 
-step_phyloseq <- function(seqtab_path, taxtab_path, samdf_path, seqs_path=NULL, phy_path=NULL){
+step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
 
-  seqtab <- readRDS(normalizePath(seqtab_path))
-  taxtab <- readRDS(normalizePath(taxtab_path))
-  samdf <- read_csv(normalizePath(samdf_path))
+  # Check if seqtab is a path
+  if(is(seqtab, "character")){
+    if(file.exists(seqtab)){
+      seqtab <- readRDS(normalizePath(seqtab))
+    } else {
+      stop("seqtab does not exist")
+    }
+  }
+  
+  # Check if taxtab is a path
+  if(is(taxtab, "character") ){
+    if(file.exists(taxtab)){
+      taxtab <- readRDS(normalizePath(taxtab))
+    } else {
+      stop("taxtab does not exist")
+    }
+  }
+  
+  # Check if samdf is a path - if so read in
+  if(is(samdf, "character")){
+    if (file.exists(samdf)){
+      samdf <- read_csv(normalizePath(samdf))
+    } else {
+      stop("samdf does not exist")
+    }
+  } 
   if(is.null(seqs_path)){
     seqs <- DNAStringSet(colnames(seqtab))
     names(seqs) <- seqs
@@ -1256,9 +1297,115 @@ step_rareplot <- function(ps, min_reads=1000, plot_dir=NULL){
   
 }
 
-step_filter_phyloseq <- function(ps, min_reads=1000, quiet=FALSE){
-    #Remove all samples under the minimum read threshold 
-  ps1 <- ps %>%
+step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA, 
+                                 order = NA, family = NA, genus = NA, species = NA,
+                                 min_reads=1000, quiet=FALSE){
+  
+  #Taxonomic filtering
+  taxtab <- tax_table(ps) %>%
+    as("data.frame")
+  
+  # Filter kingdom
+  ps0 <- ps
+  if(!is.na(kingdom)){
+    if (any(str_detect(taxtab$Kingdom, kingdom))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Kingdom",
+          value = kingdom
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Kingdom", kingdom," - skipping this filter"))}
+    }
+  }
+  # Filter phylum
+  ps0 <- ps
+  if(!is.na(phylum)){
+    if (any(str_detect(taxtab$Phylum, phylum))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Phylum",
+          value = phylum
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Phylum", phylum," - skipping this filter"))}
+    }
+  }
+  # Filter class
+  ps0 <- ps
+  if(!is.na(class)){
+    if (any(str_detect(taxtab$Class, class))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Class",
+          value = class
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Class", class," - skipping this filter"))}
+    }
+  }
+  # Filter order
+  ps0 <- ps
+  if(!is.na(order)){
+    if (any(str_detect(taxtab$Order, order))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Order",
+          value = order
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Order", order," - skipping this filter"))}
+    }
+  }
+  # Filter family
+  ps0 <- ps
+  if(!is.na(family)){
+    if (any(str_detect(taxtab$Family, family))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Family",
+          value = family
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Family", family," - skipping this filter"))}
+    }
+  }
+  # Filter genus
+  ps0 <- ps
+  if(!is.na(family)){
+    if (any(str_detect(taxtab$Genus, genus))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Genus",
+          value = genus
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Genus", genus," - skipping this filter"))}
+    }
+  }
+  # Filter Species
+  ps0 <- ps
+  if(!is.na(family)){
+    if (any(str_detect(taxtab$Species, species))){
+      ps0 <- ps0 %>%
+        subset_taxa_new(
+          rank = "Species",
+          value = species
+        ) %>%
+        filter_taxa(function(x) mean(x) > 0, TRUE)
+    } else{
+      if (!quiet){warning(paste0("No ASVs were assigned to the Species", species," - skipping this filter"))}
+    }
+  }
+
+  #Remove all samples under the minimum read threshold 
+  ps1 <- ps0 %>%
     prune_samples(sample_sums(.)>=min_reads, .) %>% 
     filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
   
@@ -1415,68 +1562,6 @@ fastqc_install <- function (url, dest_dir = "bin", dest.dir = "bin", force = FAL
 }
 
 
-# General utilities -------------------------------------------------------
-
-#' Create Samplesheet
-#'
-#' @param SampleSheet A samplesheet or set of samplesheets in MiSeq or NovaSeq format
-#' @param runParameters A runParamers.xml or set of these output by the sequencer
-#' @param template The output format you would like.
-#' This can be a character referring to the version of the sample sheet (currently only "V4" is supported)
-#' Or a data.frame input to use as a template
-#'
-#' @return
-#' @export
-#' @import purrr
-#' @import dplyr
-#' @import janitor
-#'
-#' @examples
-create_samplesheet <- function(SampleSheet, runParameters, template = "V4"){
-  if (missing(runParameters)) {stop("Error: need to provide a runParameters file in .xml format")}
-  if (missing(SampleSheet)) {stop("Error: need to provide a SampleSheet file in .csv format")}
-  if (length(SampleSheet) > 1) {multi <- TRUE}
-  if (!length(SampleSheet) == length(runParameters)) {
-    stop("Error: you have provided ", length(SampleSheet) , " SampleSheets and ", length(runParameters), " runParameters files. One of each must be provided per run")
-  }
-  
-  #Parse files
-  merged <- purrr::map2(SampleSheet, runParameters, parse_seqrun) %>%
-    dplyr::bind_rows()
-  
-  # Reformat to the format required
-  if (is.character(template) && template=="V4"){
-    # read in the template from package data
-    data("samdf_template_v4", package="seqateurs")
-    template <- get("samdf_template_v4", envir = sys.frame(sys.parent(0)))
-  } else if (any(class(template) == "data.frame")){
-    template <- template
-  } else {
-    stop("Error, only template='V4' or a user provided data framecurrently supported")
-  }
-  matching <- merged %>%
-    janitor::clean_names()%>%
-    dplyr::rename(
-      i7_index = index,
-      i5_index = index2,
-      index_plate = sample_plate,
-      index_well = sample_well,
-      operator_name = investigator_name,
-      client_name = project_name,
-      seq_id = instrument_name,
-      seq_date = run_start_date,
-      seq_run_id = run_id
-    ) %>%
-    #dplyr::mutate(seq_platform = format) %>%
-    dplyr::select_if(names(.) %in% colnames(template))
-  matching[,setdiff(colnames(template), colnames(matching))] <- NA
-  out <- matching %>%
-    dplyr::select(colnames(template))
-  
-  message(paste0(length(unique(out$sample_id))," samples total"))
-  return(out)
-}
-
 # Phyloseq utilities ------------------------------------------------------
 
 
@@ -1524,3 +1609,43 @@ phyloseq_filter_sample_wise_abund_trim <- function(physeq, minabund = 10, relabu
   return(res)
 }
 
+# New subset taxa function that allows variable column inputs
+subset_taxa_new <- function(physeq, rank, value){
+  if (is.null(tax_table(physeq))) {
+    cat("Nothing subset. No taxonomyTable in physeq.\n")
+    return(physeq)
+  } else {
+    oldMA <- as(tax_table(physeq), "matrix")
+    oldDF <- data.frame(oldMA)
+    newDF <- oldDF %>%
+      dplyr::filter(UQ(sym(rank)) == value)
+    newMA <- as(newDF, "matrix")
+    tax_table(physeq) <- tax_table(newMA)
+    return(physeq)
+  }
+}
+
+# New merge phyloseq function that accepts a list of phyloseq objects
+merge_phyloseq_new <- function (arguments){
+  comp.list <- list()
+  for (i in 1:length(arguments)) {
+    comp.list <- c(comp.list, phyloseq:::splat.phyloseq.objects(arguments[[i]]))
+  }
+  merged.list <- list()
+  for (i in unique(names(comp.list))) {
+    i.list <- comp.list[names(comp.list) == i]
+    if (length(i.list) == 1) {
+      merged.list <- c(merged.list, i.list)
+    } else {
+      x1 <- i.list[[1]]
+      for (j in 2:length(i.list)) {
+        x1 <- merge_phyloseq_pair(x1, i.list[[j]])
+      }
+      x1 <- list(x1)
+      names(x1) <- i
+      merged.list <- c(merged.list, x1)
+    }
+  }
+  names(merged.list) <- NULL
+  return(do.call(phyloseq, merged.list))
+}

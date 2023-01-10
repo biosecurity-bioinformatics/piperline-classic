@@ -160,15 +160,10 @@ library(taxreturn)
 devtools::install_github("mikemc/speedyseq", dependencies = TRUE)
 library(speedyseq)
 
-#Install bbmap if its not in $path or in bin folder
-if(Sys.which("bbduk") == "" & !file.exists("bin/bbmap/bbduk.sh")){
-  seqateurs::bbmap_install(dest_dir = "bin")
-}
 
-#Install fastqc if its not in $path or in bin folder
-if(Sys.which("fastqc") == "" & !file.exists("bin/FastQC/fastqc")){
-  seqateurs::fastqc_install(dest_dir = "bin")
-}
+library(targets)
+library(tarchetypes)
+source("R/functions.R")
 
 
 source("R/dependencies.R")
@@ -239,16 +234,87 @@ if (length(setdiff(samdf$sample_id, fastqFs)) > 0) {
                  " is missing, dropping from samplesheet \n")) 
   samdf <- samdf %>%
     filter(!sample_id %in% setdiff(samdf$sample_id, fastqFs))
-  logdf <- logdf %>%
-    filter(!sample_id %in% setdiff(logdf$sample_id, fastqFs))
 }
 
+write_csv(samdf, "sample_data/Sample_info.csv")
+```
+
+# Add PCR primers to sample sheet {.tabset}
+
+This can either be done manually by editing the sample_data/Sample_info.csv file, or it can be done in R as below.
+
+If a single primer set was used across all samples, these can simply be added using a mutate call (**tab 1**).
+
+If different primers were used for different samples, these can be set using pattern matching on the sample names with case_when (**tab 2**).
+
+If multiple primer sets are used per sample, before indexing, the pipeline will conduct an extra round of demultiplexing to split each sample by primer. This option can be set by splitting each primer set with a semicolon (**tab 3**) 
+
+## Single primer set
+
+```{R}
 # Add primers to sample sheet
 samdf <- samdf %>%
   mutate(pcr_primers = "fwhF2-fwhR2n",
   for_primer_seq = "GGDACWGGWTGAACWGTWTAYCCHCC",
-  rev_primer_seq = "GTRATWGCHCCDGCTARWACWGG")
+  rev_primer_seq = "GTRATWGCHCCDGCTARWACWGG"
+  )
 
+write_csv(samdf, "sample_data/Sample_info.csv")
+```
+
+## Different primer sets per sample
+
+```{R}
+# Add PCR primers to sample sheet
+samdf <- samdf %>%
+  mutate(pcr_primers = case_when(
+    str_detect(sample_name, "primer1") ~ "fwhF2-fwhR2n",
+    str_detect(sample_name, "primer2") ~ "EIF3LminiF4-EIF3lminiR4"
+  ),
+  for_primer_seq = case_when(
+    str_detect(sample_name, "primer1") ~ "GGDACWGGWTGAACWGTWTAYCCHCC",
+    str_detect(sample_name, "primer2") ~ "GATGCGYCGTTATGCYGATGC"
+  ),
+  rev_primer_seq = case_when(
+    str_detect(sample_name, "primer1") ~ "GTRATWGCHCCDGCTARWACWGG",
+    str_detect(sample_name, "primer2") ~ "TTRAAYACTTCYARATCRCC"
+  ))
+
+
+write_csv(samdf, "sample_data/Sample_info.csv")
+```
+
+## Multiple primer sets per sample
+
+```{R}
+# Add PCR primers to sample sheet
+samdf <- samdf %>%
+  mutate(
+    pcr_primers = "fwhF2-fwhR2nDac;EIF3LminiF4-EIF3lminiR4",
+    for_primer_seq = "GGDACWGGWTGAACWGTWTAYCCHCC;GATGCGYCGTTATGCYGATGC",
+    rev_primer_seq = "GTRATWGCHCCIGCTAADACHGG;TTRAAYACTTCYARATCRCC"
+    )
+
+write_csv(samdf, "sample_data/Sample_info.csv")
+```
+
+
+# Create parameters file {.tabset}
+
+The parameters file table the respective target gene, reference databases, and filtering parameters for each primer set used to amplify the samples. As the pcr_primers column is used in the pipeline to match the parameters to the respective sample, it is critical that the primer names match those set in the previous step.
+
+If a single primer set was used across all samples, these can simply be added to the table as below (**tab 1**).
+
+If different primers were used for different samples, these can be set as different rows in the table using c() when creatign the tibble (**tab 2**).
+
+If multiple primer reference databases are to be used for each sample, these can be set by splitting each a semicolon. The taxonomic assignment will be conducted sequentially through the databases from left to right, with the second reference database only being used for those ASVs that couldnt be assigned to species level using the first databases (**tab 3**) 
+
+The genetic code parameter is used to check coding markers for stop codons and frameshifts that commonly indicate pseudogenes. For COI amplicons from insects, the invertebrate mitochondrial code is "SGC4", while the standard genetic code is "SGC0". If you are targetting other groups of organisms, all alternative genetic codes can be found by running Biostrings::GENETIC_CODE_TABLE in R.
+
+
+## Single primer set
+
+```{R}
 # Params to add in step_add_parameters
 params <- tibble(
   pcr_primers = "fwhF2-fwhR2n",
@@ -261,20 +327,47 @@ params <- tibble(
   coding = TRUE
 )
 
-#Write out updated sample CSV for use
-write_csv(samdf, "sample_data/Sample_info.csv")
 write_csv(params, "sample_data/loci_params.csv")
 ```
 
-# Load targets package
+## Different or multiple primer sets per sample
 
-```{r}
-library(targets)
-library(tarchetypes)
-source("R/functions.R")
+```{R}
+# Params to add in step_add_parameters
+params <- tibble(
+  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
+  target_gene=c("COI", "EIF3L"),
+  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
+  ref_db = c("reference/COI_idtaxa.rds","reference/EIF3L_idtaxa.rds"),
+  blast_db = c("reference/COI_hierarchial.fa.gz", "reference/EIF3L_hierarchial.fa.gz"),
+  exp_length = c(205, 217),
+  genetic_code = c("SGC4", "SGC0"),
+  coding = c(TRUE, TRUE)
+)
+
+write_csv(params, "sample_data/loci_params.csv")
 ```
 
-# Run pipeline
+## Multiple reference databases
+
+```{r}
+params <- tibble(
+  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
+  target_gene=c("COI", "EIF3L"),
+  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
+  ref_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds","reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
+  blast_db = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz", "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
+  exp_length = c(205, 217),
+  genetic_code = c("SGC4", "SGC0"),
+  coding = c(TRUE, TRUE)
+)
+
+write_csv(params, "sample_data/loci_params.csv")
+```
+
+# Run pipeline {-}
+
+Now that the sample data sheet and parameters are defined, the pipeline can now be run. This will q
 ```{r}
 tar_make()
 ```

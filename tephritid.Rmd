@@ -309,7 +309,15 @@ params <- tibble(
   blast_db = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz", "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
   exp_length = c(205, 217),
   genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE)
+  coding = c(TRUE, TRUE),
+  target_kingdom = c("Metazoa", "Metazoa"),
+  target_phylum = c("Arthropoda","Arthropoda"),
+  target_class = c("Insecta", "Insecta"),
+  target_order = c("Diptera", "Diptera"),
+  target_family = c(NA_character_, NA_character_), 
+  target_genus = c(NA_character_, NA_character_),  
+  target_species= c(NA_character_, NA_character_),  
+  min_reads_per_sample = c(1000, 1000)
 )
 
 # Write out the parameters file
