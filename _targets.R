@@ -282,25 +282,25 @@ tar_target(subset_seqtab_path,
 #  Filter ASV's per locus -------------------------------------------------
  tar_target(filtered_seqtab, {
           temp_samdf3 %>%
-           dplyr::select(-one_of("exp_length", "phmm", "coding", "genetic_code"))%>%
-           left_join(params %>% dplyr::select(pcr_primers, exp_length, phmm, coding, genetic_code)) %>%
-           group_by(pcr_primers, exp_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
+           dplyr::select(-one_of("min_length", "max_length", "phmm", "coding", "genetic_code"))%>%
+           left_join(params %>% dplyr::select(pcr_primers, min_length, max_length, phmm, coding, genetic_code)) %>%
+           group_by(pcr_primers, min_length, max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
            nest() %>%
            mutate(subset_seqtab = purrr::map(pcr_primers, ~{
                 readRDS(subset_seqtab_path[str_detect(subset_seqtab_path, .x)])
            })) %>%
            ungroup()%>%
-           mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, exp_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
+           mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, min_length, max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
                .f = ~step_filter_asvs(
                seqtab = ..2,
                output = paste0("output/rds/",..1,"_seqtab.cleaned.rds"),
                qc_dir = "output/logs/",
-               min_length = ..3-10,
-               max_length = ..3+10,
-               phmm = ..4,
-               check_frame = ..5,
-               genetic_code = ..6,
-               primers = c(..7, ..8),
+               min_length = ..3,
+               max_length = ..4,
+               phmm = ..5,
+               check_frame = ..6,
+               genetic_code = ..7,
+               primers = c(..8, ..9),
                multithread = FALSE, 
                quiet = FALSE)
          )) %>% 

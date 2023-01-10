@@ -322,9 +322,18 @@ params <- tibble(
   phmm = "reference/folmer_fullength_model.rds",
   ref_db = "reference/idtaxa_bftrimmed.rds",
   blast_db = "reference/insecta_hierarchial_bftrimmed.fa.gz",
-  exp_length = 205,
+  min_length = 195,
+  max_length = 215,
   genetic_code = "SGC4",
-  coding = TRUE
+  coding = TRUE,
+  target_kingdom = "Metazoa",
+  target_phylum = "Arthropoda",
+  target_class = NA_character_,
+  target_order = NA_character_,
+  target_family = NA_character_, 
+  target_genus = NA_character_, 
+  target_species= NA_character_,
+  min_reads_per_sample = 1000
 )
 
 write_csv(params, "sample_data/loci_params.csv")
@@ -340,9 +349,18 @@ params <- tibble(
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
   ref_db = c("reference/COI_idtaxa.rds","reference/EIF3L_idtaxa.rds"),
   blast_db = c("reference/COI_hierarchial.fa.gz", "reference/EIF3L_hierarchial.fa.gz"),
-  exp_length = c(205, 217),
+  min_length = c(195, 207),
+  max_length = c(215, 227),
   genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE)
+  coding = c(TRUE, TRUE),
+  target_kingdom = c("Metazoa", "Metazoa"),
+  target_phylum = c("Arthropoda","Arthropoda"),
+  target_class = c(NA_character_, NA_character_),
+  target_order = c(NA_character_, NA_character_),
+  target_family = c(NA_character_, NA_character_), 
+  target_genus = c(NA_character_, NA_character_),  
+  target_species= c(NA_character_, NA_character_),  
+  min_reads_per_sample = c(1000, 1000)
 )
 
 write_csv(params, "sample_data/loci_params.csv")
@@ -357,17 +375,25 @@ params <- tibble(
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
   ref_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds","reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
   blast_db = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz", "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
-  exp_length = c(205, 217),
+  min_length = c(195, 207),
+  max_length = c(215, 227),
   genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE)
+  coding = c(TRUE, TRUE),
+  target_kingdom = c("Metazoa", "Metazoa"),
+  target_phylum = c("Arthropoda","Arthropoda"),
+  target_class = c(NA_character_, NA_character_),
+  target_order = c(NA_character_, NA_character_),
+  target_family = c(NA_character_, NA_character_), 
+  target_genus = c(NA_character_, NA_character_),  
+  target_species= c(NA_character_, NA_character_),  
+  min_reads_per_sample = c(1000, 1000)
 )
-
 write_csv(params, "sample_data/loci_params.csv")
 ```
 
 # Run pipeline {-}
 
-Now that the sample data sheet and parameters are defined, the pipeline can now be run. This will q
+Now that the sample data sheet and parameters are defined, the pipeline can now be run.
 ```{r}
 tar_make()
 ```
