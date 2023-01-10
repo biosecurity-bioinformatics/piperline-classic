@@ -26,8 +26,18 @@ knitr::opts_chunk$set(echo = TRUE, eval=FALSE, message=FALSE,error=FALSE, fig.sh
 opts_chunk$set(dev = 'png')
 ```
 
-# Demultiplex sequencing reads
-For this workflow to run, we need to first demultiplex the miseq run again as the miseq does not put indexes in fasta headers by default, and also obtain some necessary files from the sequencing folder. The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
+# Clone the pipeRline github repository
+
+## Rstudio
+
+## Command line
+
+
+# Prior to analysis
+The PipeRline workflow assumes that your sequencing data meets certain criteria:
+
+1. Samples have been demultiplexed, i.e. split into individual per-sample fastq files. If you want the pipeline to calculate the index-switching rate, the fastq files need to be re-demultiplexed as the miseq does not put indexes in fasta headers by default
+2. For paired-end sequencing data, the forward and reverse reads are in separate files (ie. not interleaved) with reads arranged in matched order.
 
 The output directory should be unique for each sequencing run, named as the flowcell id, within a directory called data
 
@@ -37,6 +47,9 @@ For example:
       ├── data/
          ├── CJL7D/
          
+## Demultiplex sequencing reads
+For this workflow to run, we need to first demultiplex the miseq run again as the miseq does not put indexes in fasta headers by default, and also obtain some necessary files from the sequencing folder. The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
+
 ```{bash demultiplex 1 mismatch}
 #load module
 module load bcl2fastq2/2.20.0-foss-2018b
@@ -73,126 +86,71 @@ fcid=$(echo $inputdir | sed 's/^.*-//')
 for i in *.fastq.gz; do
   if ! [[ $i == $fcid* ]]; then
   new=$(echo ${fcid} ${i}) #append together
-  new=$(echo ${new// /_}) #remove any whitespace
+  new=$(echo ${new// /_}) #remove any white space
   mv -v "$i" "$new"
   fi
 done
 
 ```
 
-# Optional: Run R on BASC
-You may wish to run this workflow through the BASC command line in order to take advantage of more processing power. To do this, you can start a new SLURM interactive session. Press the CODE button to the lower right to display the code for this optional step.
 
-```{bash, class.source = 'fold-hide'}
-cd /group/pathogens/IAWS/Projects/Metabarcoding/dros_surveillance
-# Create new interactive SLURM session
-sinteractive --ntasks=1 --cpus-per-task=10 --mem-per-cpu=10GB --time=72:00:00
+## Download example sequencing reads
 
-module load R/4.2.0-foss-2021b
-module load pkgconfig/1.5.1-GCCcore-9.3.0-Python-3.8.2
-module load GDAL/3.3.0-foss-2021a
-module load BLAST+/2.11.0-gompi-2020a
-module load Pandoc/2.5
+If you do not yet have any data, some test sequencing reads have been hosted on Zenodo for testing purposes. The below code will download these and put them inside the data folder.
 
-# Load R
-R
+```{r}
+# Create directory for data
+if(!dir.exists("data/K77JP")) {dir.create("data/K77JP", recursive = TRUE)}
+if(!dir.exists("data/K77JP/InterOp")) {dir.create("data/K77JP/InterOp", recursive = TRUE)}
 
-# Run quit() to quit R once you are finished
+# Download files from zenodo
+download_zenodo(
+doi = "10.5281/zenodo.7112162",
+path = "data/K77JP"
+)
+
+# Move the interop files to the interop folder
+fs::dir_ls(path="data/K77JP", glob="*.bin") %>%
+  purrr::map(function(x){
+    fs::file_copy(path = x, new_path = x %>% str_replace("data/K77JP", "data/K77JP/InterOp"))
+    file.remove(x)
+  })
 ```
 
-
 # Install and load R packages and setup directories {.tabset}
-
-The seqateurs R package also provides wrappers around other software packages for QC. For convenience we will download and install these software in a new folder called "bin"
-
 ```{r Manual install} 
-#Set required packages
-.cran_packages <- c(
-  "devtools",
-  "ggplot2",
-  "gridExtra",
-  "data.table",
-  "tidyverse", 
-  "stringdist",
-  "patchwork",
-  "vegan",
-  "seqinr",
-  "patchwork",
-  "stringi",
-  "phangorn",
-  "magrittr",
-  "galah"
-  )
-
-.bioc_packages <- c(
-  "phyloseq",
-  "DECIPHER",
-  "Biostrings",
-  "ShortRead",
-  "ggtree",
-  "savR",
-  "dada2",
-  "ngsReports"
-  )
-
-.inst <- .cran_packages %in% installed.packages()
-if(any(!.inst)) {
-   install.packages(.cran_packages[!.inst])
-}
-.inst <- .bioc_packages %in% installed.packages()
-if(any(!.inst)) {
-  if (!requireNamespace("BiocManager", quietly = TRUE)){
-    install.packages("BiocManager")
-  }
-  BiocManager::install(.bioc_packages[!.inst], ask = F)
-}
-
-#Load all published packages
-sapply(c(.cran_packages,.bioc_packages), require, character.only = TRUE)
-
-# Install and load github packages
-devtools::install_github("alexpiper/seqateurs", dependencies = TRUE)
-library(seqateurs)
-
-devtools::install_github("alexpiper/taxreturn", dependencies = TRUE)
-library(taxreturn)
-
-devtools::install_github("mikemc/speedyseq", dependencies = TRUE)
-library(speedyseq)
-
-
+# Load the targets and renv packages
 library(targets)
 library(tarchetypes)
-source("R/functions.R")
 
+# Load all packages using renv::restore()
+renv::restore()
 
-source("R/dependencies.R")
+# Source ancillary functions
 source("R/functions.R")
 source("R/themes.R")
 ```
 
+# Download reference databases
 
-# Create sample sheet 
+The pipeRline workflow uses the IDTAXA and BLAST software to assign taxonomy to the sequence reads. These require a pre-trained IDTAXA model, and a fasta file with heirarchial taxonomy like below:
 
-The directory structure should now look something like this:
+```{code}
+>Accession|Root;Kingdom;Phylum;Class;Order;Family;Genus;Species
+ACCTAGAAAGTCGTAGATCGAAGTTGAAGCATCGCCCGATGATCGTCTGAAGCTGTAGCATGAGTCGATTTTCACATTCAGGGATACCATAGGATAC
+>Root;Kingdom;Phylum;Class;Order;Family;Genus;Species
+CGCTAGAAAGTCGTAGAAGGCTCGGAGGTTTGAAGCATCGCCCGATGGGATCTCGTTGCTGTAGCATGAGTACGGACATTCAGGGATCATAGGATAC
+```
 
-    root/
-    ├── data/
-    │   ├── CJL7D/
-    │   │  ├── R1.fastq.gz
-    │   │  ├── R2.fastq.gz
-    │   │  ├── runInfo.xml
-    │   │  ├── runParameters.xml
-    │   │  ├── SampleSheet.csv
-    │   │  └── InterOp/
-    │   └── fcid2/
-    ├── sample_data/
-    ├── reference
-    ├── bin
-    ├── output/
-    └── doc/
+Here is an example from an existing database:
+```{code}
+ABC001|2029192;Metazoa;Arthropoda;Insecta;Diptera;Tephritidae;Bactrocera;Bactrocera abscondita
+ACTATCATCTATTATTGCTCACGGAGGAGCATCAGTTGATCTAGCTATTTTTTCACTCCACTTAGCGGGTATTTCCTCAATTCTAGGAGCTGTCAATTTCATTAC
+>ALB002|164677;Metazoa;Arthropoda;Insecta;Diptera;Tephritidae;Bactrocera;Bactrocera albistrigata
+CCTATCATCTGTNATTGCTCACGGAGGAGCTTCAGTTGATCTAGCTATTTTCTCACTTCACCTAGCNGGTATTTCCTCAATTTTAGGGGCAGTTAATTTTATTAC
+```
 
-The reference and bin folders can be copied from previous runs. 
+# Create sample tracking sheet
 
 In order to track samples and relevant QC statistics throughout the metabarcoding pipeline, we will first create a new samplesheet from our input samplesheets. This function requires both the SampleSheet.csv used for the sequencing run, and the runParameters.xml, both of which should have been automatically obtained from the demultiplexed sequencing run folder in the bash step above
 
@@ -205,29 +163,27 @@ runParameters <- list.files(paste0("data/", runs), pattern= "[Rr]unParameters.xm
 samdf <- create_samplesheet(SampleSheet = SampleSheet, runParameters = runParameters, template = "V4") %>%
   distinct()
 
-# Filter out the run where the reverse reads failed
-samdf <- samdf %>%
-  dplyr::filter(!fcid == "KJ2DL")
-
-# Check if sampleids contain fcid, if not; attatch
+# Check that sample_ids contain fcid, if not; attatch
 samdf <- samdf %>%
   mutate(sample_id = case_when(
     !str_detect(sample_id, fcid) ~ paste0(fcid,"_",sample_id),
     TRUE ~ sample_id
   ))
 
-# Check if samples match samplesheet
+# Check that samples match samplesheet
 fastqFs <- purrr::map(list.dirs("data", recursive=FALSE),
                       list.files, pattern="_R1_", full.names = TRUE) %>%
   unlist() %>%
   str_remove(pattern = "^(.*)\\/") %>%
   str_remove(pattern = "(?:.(?!_S))+$")
+
+# Filter undetermined reads from sample sheet
 fastqFs <- fastqFs[!str_detect(fastqFs, "Undetermined")]
 
-#Check missing in samplesheet
+# Check for fastq files that are missing from samplesheet
 if (length(setdiff(fastqFs, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(fastqFs, samdf$sample_id), " are not in the sample sheet") }
 
-#Check missing fastqs
+# Check for sample_ids that dont have a corresponding fastq file
 if (length(setdiff(samdf$sample_id, fastqFs)) > 0) {
   warning(paste0("The fastq file: ",
                  setdiff(samdf$sample_id, fastqFs),
@@ -236,6 +192,7 @@ if (length(setdiff(samdf$sample_id, fastqFs)) > 0) {
     filter(!sample_id %in% setdiff(samdf$sample_id, fastqFs))
 }
 
+# Write out sample tracking sheet
 write_csv(samdf, "sample_data/Sample_info.csv")
 ```
 
@@ -311,13 +268,12 @@ If multiple primer reference databases are to be used for each sample, these can
 
 The genetic code parameter is used to check coding markers for stop codons and frameshifts that commonly indicate pseudogenes. For COI amplicons from insects, the invertebrate mitochondrial code is "SGC4", while the standard genetic code is "SGC0". If you are targetting other groups of organisms, all alternative genetic codes can be found by running Biostrings::GENETIC_CODE_TABLE in R.
 
-
 ## Single primer set
 
 ```{R}
 # Params to add in step_add_parameters
 params <- tibble(
-  pcr_primers = "fwhF2-fwhR2n",
+  pcr_primers = "fwhF2-fwhR2n", 
   target_gene="COI",
   phmm = "reference/folmer_fullength_model.rds",
   ref_db = "reference/idtaxa_bftrimmed.rds",

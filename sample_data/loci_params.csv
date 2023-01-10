@@ -1,0 +1,3 @@
+pcr_primers,target_gene,phmm,ref_db,blast_db,min_length,max_length,genetic_code,coding,target_kingdom,target_phylum,target_class,target_order,target_family,target_genus,target_species,min_reads_per_sample
+fwhF2-fwhR2nDac,COI,reference/phmm/Bactrocera_COI.rds,reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds,reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz,195,215,SGC4,TRUE,Metazoa,Arthropoda,Insecta,Diptera,NA,NA,NA,1000
+EIF3LminiF4-EIF3lminiR4,EIF3L,reference/phmm/Bactrocera_EIF3L.rds,reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds,reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz,207,227,SGC0,TRUE,Metazoa,Arthropoda,Insecta,Diptera,NA,NA,NA,1000

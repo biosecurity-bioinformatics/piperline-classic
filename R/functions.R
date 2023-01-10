@@ -83,7 +83,7 @@ step_validate_folders <- function(project_dir){
        "output/rds",
        "sample_data") %>%
     purrr::map(normalizePath) %>%
-    purrr::map(function(x){
+    purrr::walk(function(x){
       if(!dir.exists(x)){
         dir.create(x, recursive=TRUE)
       }
