@@ -137,7 +137,7 @@ step_validate_samdf <- function(samdf, data_dir){
 
 # Quality control ---------------------------------------------------------
 
-step_seq_qc <- function(fcid, quiet=FALSE){
+step_seq_qc <- function(fcid, quiet=FALSE, write_metrics=FALSE){
   
   seq_dir <- paste0("data/", fcid, "/")
   qc_dir <- paste0("output/logs/", fcid,"/" )
@@ -147,7 +147,18 @@ step_seq_qc <- function(fcid, quiet=FALSE){
     stop("seq_dir doesnt exist, check that the correct path was provided")
   }
   if(!dir.exists(paste0(seq_dir,"/InterOp"))){
-    stop("InterOp folder must be present to run quality checks")
+    warning("InterOp folder must be present to run quality checks")
+    out <- tibble(fcid = fcid,
+                  reads_pf = NA_integer_,
+                  reads_total = NA_integer_)
+    return(out)
+  }
+  if(!dir.exists(paste0(seq_dir,"/RunInfo.xml"))){
+    warning("RunInfo.xml must be present to run quality checks")
+    out <- tibble(fcid = fcid,
+                  reads_pf = NA_integer_,
+                  reads_total = NA_integer_)
+    return(out)
   }
   
   # Create qc_dir if it doesnt exist
@@ -156,11 +167,13 @@ step_seq_qc <- function(fcid, quiet=FALSE){
   ## Sequencing run quality check using savR
   fc <- savR::savR(seq_dir)
   
-  readr::write_csv(savR::correctedIntensities(fc), normalizePath(paste0(qc_dir, "/correctedIntensities.csv")))
-  readr::write_csv(savR::errorMetrics(fc), normalizePath(paste0(qc_dir, "/errorMetrics.csv")))
-  readr::write_csv(savR::extractionMetrics(fc), normalizePath(paste0(qc_dir, "/extractionMetrics.csv")))
-  readr::write_csv(savR::qualityMetrics(fc), normalizePath(paste0(qc_dir, "/qualityMetrics.csv")))
-  readr::write_csv(savR::tileMetrics(fc), normalizePath(paste0(qc_dir, "/tileMetrics.csv")))
+  if(write_metrics){
+    readr::write_csv(savR::correctedIntensities(fc), normalizePath(paste0(qc_dir, "/correctedIntensities.csv")))
+    readr::write_csv(savR::errorMetrics(fc), normalizePath(paste0(qc_dir, "/errorMetrics.csv")))
+    readr::write_csv(savR::extractionMetrics(fc), normalizePath(paste0(qc_dir, "/extractionMetrics.csv")))
+    readr::write_csv(savR::qualityMetrics(fc), normalizePath(paste0(qc_dir, "/qualityMetrics.csv")))
+    readr::write_csv(savR::tileMetrics(fc), normalizePath(paste0(qc_dir, "/tileMetrics.csv")))
+  }
   
   gg.avg_intensity <- fc@parsedData[["savCorrectedIntensityFormat"]]@data %>%
     dplyr::group_by(tile, lane) %>%
@@ -174,16 +187,16 @@ step_seq_qc <- function(fcid, quiet=FALSE){
     facet_wrap(~side, scales="free") +
     scale_fill_viridis_c()
   
-  pdf(file=normalizePath(paste0(qc_dir, "/avg_intensity.pdf")), width = 11, height = 8 , paper="a4r")
-  plot(gg.avg_intensity)
+  pdf(file=normalizePath(paste0(qc_dir, "/", fcid, "_imaging_intensity.pdf")), width = 11, height = 8 , paper="a4r")
+    plot(gg.avg_intensity)
   try(dev.off(), silent=TRUE)
   
-  pdf(file=normalizePath(paste0(qc_dir, "/PFclusters.pdf")), width = 11, height = 8 , paper="a4r")
-  savR::pfBoxplot(fc)
+  pdf(file=normalizePath(paste0(qc_dir,  "/", fcid, "_clusters_passing_filter.pdf")), width = 11, height = 8 , paper="a4r")
+    savR::pfBoxplot(fc)
   try(dev.off(), silent=TRUE)
   
   for (lane in 1:fc@layout@lanecount) {
-    pdf(file=normalizePath(paste0(qc_dir, "/QScore_L", lane, ".pdf")), width = 11, height = 8 , paper="a4r")
+    pdf(file=normalizePath(paste0(qc_dir,  "/", fcid, "_QScore_lane", lane, ".pdf")), width = 11, height = 8 , paper="a4r")
     savR::qualityHeatmap(fc, lane, 1:fc@directions)
     try(dev.off(), silent=TRUE)
   } 
@@ -306,6 +319,11 @@ step_switching_calc <- function(fcid, multithread=FALSE, quiet=FALSE){
     dplyr::mutate(Sample_Name = Sample_Name %>% 
                     stringr::str_remove(pattern = "^(.*)\\/") %>%
                     stringr::str_remove(pattern = "(?:.(?!_S))+$"))
+  if(all(is.na(indices$Freq))){
+    warning(paste0("No index sequences present in fastq headers for run", fcid, " no switch rate calculated"))
+    res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_)
+    return(res)
+  }
   
   combos <- indices %>% 
     dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
@@ -1299,7 +1317,7 @@ step_rareplot <- function(ps, min_reads=1000, plot_dir=NULL){
 
 step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA, 
                                  order = NA, family = NA, genus = NA, species = NA,
-                                 min_reads=1000, quiet=FALSE){
+                                 min_sample_reads=1000, min_taxa_reads=NA, min_taxa_ra = NA, quiet=FALSE){
   
   #Taxonomic filtering
   taxtab <- tax_table(ps) %>%
@@ -1403,15 +1421,32 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
       if (!quiet){warning(paste0("No ASVs were assigned to the Species", species," - skipping this filter"))}
     }
   }
-
+  
+  # Remove any taxa under read count or relative abundance thresholds
+  if(!is.na(min_taxa_reads) & is.na(min_taxa_ra)){
+    ps1 <- phyloseq::transform_sample_counts(ps0, function(OTU, ab = min_taxa_reads){ ifelse(OTU <= ab,  0, OTU) })
+  } else if(is.na(min_taxa_reads) & !is.na(min_taxa_ra)){
+    ps1 <- phyloseq::transform_sample_counts(ps0, function(OTU, ab = min_taxa_ra ){
+      ifelse((OTU / sum(OTU)) <= ab,  0, OTU) 
+    })
+  } else if (!is.na(min_taxa_reads) & !is.na(min_taxa_ra)){
+    ps1 <- ps0 %>%
+      phyloseq::transform_sample_counts(function(OTU, ab = min_taxa_reads){ ifelse(OTU <= ab,  0, OTU) }) %>%
+      phyloseq::transform_sample_counts(function(OTU, ab = min_taxa_ra ){
+        ifelse((OTU / sum(OTU)) <= ab,  0, OTU) 
+      })
+  } else {
+    ps1 <- ps0
+  }
+  
   #Remove all samples under the minimum read threshold 
-  ps1 <- ps0 %>%
-    prune_samples(sample_sums(.)>=min_reads, .) %>% 
+  ps2 <- ps1 %>%
+    prune_samples(sample_sums(.)>=min_sample_reads, .) %>% 
     filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
   
   #Message how many were removed
-  if(!quiet){message(nsamples(ps) - nsamples(ps1), " Samples and ", ntaxa(ps) - ntaxa(ps1), " ASVs dropped")}
-  return(ps1)
+  if(!quiet){message(nsamples(ps) - nsamples(ps2), " Samples and ", ntaxa(ps) - ntaxa(ps2), " ASVs dropped")}
+  return(ps2)
 }
 
 # Export samples
@@ -1560,7 +1595,6 @@ fastqc_install <- function (url, dest_dir = "bin", dest.dir = "bin", force = FAL
   utils::unzip(destfile, exdir = dest_dir)
   file.remove(destfile)
 }
-
 
 # Phyloseq utilities ------------------------------------------------------
 

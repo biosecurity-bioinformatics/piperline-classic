@@ -68,6 +68,17 @@
         "snow"
       ]
     },
+    "BiocVersion": {
+      "Package": "BiocVersion",
+      "Version": "3.15.2",
+      "Source": "Bioconductor",
+      "git_url": "https://git.bioconductor.org/packages/BiocVersion",
+      "git_branch": "master",
+      "git_last_commit": "818ab03",
+      "git_last_commit_date": "2022-03-29",
+      "Hash": "48e545a2fa24a967de72b1114bfe96ac",
+      "Requirements": []
+    },
     "Biostrings": {
       "Package": "Biostrings",
       "Version": "2.64.0",
@@ -328,14 +339,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "470851b6d5d0ac559e9d01bb352b4021",
-      "Requirements": []
-    },
-    "RANN": {
-      "Package": "RANN",
-      "Version": "2.6.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "d128ea05a972d3e67c6f39de52c72bd7",
       "Requirements": []
     },
     "RColorBrewer": {
@@ -1960,28 +1963,6 @@
       "Hash": "6154ec2223172bce8162d4153cda21f7",
       "Requirements": []
     },
-    "insect": {
-      "Package": "insect",
-      "Version": "1.4.0.9000",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "insect",
-      "RemoteUsername": "shaunpwilkinson",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "8be355c61ad6636fd2dc8260b92ce1d1d95ec52b",
-      "Hash": "0bd57dd8b9be6044541bee289d2dca56",
-      "Requirements": [
-        "RANN",
-        "ape",
-        "aphid",
-        "kmer",
-        "openssl",
-        "phylogram",
-        "seqinr",
-        "xml2"
-      ]
-    },
     "interp": {
       "Package": "interp",
       "Version": "1.1-3",
@@ -3278,12 +3259,12 @@
       "Version": "0.0.0.9000",
       "Source": "GitHub",
       "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "seqateurs",
       "RemoteUsername": "alexpiper",
+      "RemoteRepo": "seqateurs",
       "RemoteRef": "HEAD",
-      "RemoteSha": "80f7e4e1db058344595dcfb07f1a77d75587b97f",
-      "Hash": "2ab51f67f19a5619d242533823c8bd8b",
+      "RemoteSha": "e239467d732408af513963ac1a98748c71a3ddb9",
+      "RemoteHost": "api.github.com",
+      "Hash": "e7ac53e0dd8b3c650aeb24892cd2dd71",
       "Requirements": [
         "Biostrings",
         "DECIPHER",

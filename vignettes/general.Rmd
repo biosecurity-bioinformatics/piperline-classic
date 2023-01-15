@@ -1,5 +1,6 @@
 ---
 title: "PipeRline"
+subtitle: "General example"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
@@ -28,6 +29,12 @@ library(tarchetypes)
 knitr::opts_chunk$set(echo = TRUE, eval=FALSE, message=FALSE,error=FALSE, fig.show = "hold", fig.keep = "all")
 opts_chunk$set(dev = 'png')
 ```
+
+# Introduction
+
+This metabarcoding pipeline is based around the targets package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
+
+This page lists the general workflow and all the options that can be adapted for your dataset.
 
 # Clone the pipeRline github repository
 
@@ -298,7 +305,9 @@ params <- tibble(
   target_family = NA_character_, 
   target_genus = NA_character_, 
   target_species= NA_character_,
-  min_reads_per_sample = 1000
+  min_sample_reads = 1000,
+  min_taxa_reads= NA_integer_, # Minimum reads per ASV to retain
+  min_taxa_ra = 1e-4, # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
 )
 
 write_csv(params, "sample_data/loci_params.csv")
@@ -325,7 +334,9 @@ params <- tibble(
   target_family = c(NA_character_, NA_character_), 
   target_genus = c(NA_character_, NA_character_),  
   target_species= c(NA_character_, NA_character_),  
-  min_reads_per_sample = c(1000, 1000)
+  min_sample_reads = c(1000, 1000),
+  min_taxa_reads= c(NA_integer_, NA_integer_ ), # Minimum reads per ASV to retain
+  min_taxa_ra = c(1e-4, 1e-4), # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
 )
 
 write_csv(params, "sample_data/loci_params.csv")
@@ -351,15 +362,15 @@ params <- tibble(
   target_family = c(NA_character_, NA_character_), 
   target_genus = c(NA_character_, NA_character_),  
   target_species= c(NA_character_, NA_character_),  
-  min_reads_per_sample = c(1000, 1000)
+  min_sample_reads = c(1000, 1000),
+  min_taxa_reads= c(NA_integer_, NA_integer_ ), # Minimum reads per ASV to retain
+  min_taxa_ra = c(1e-4, 1e-4), # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
 )
 write_csv(params, "sample_data/loci_params.csv")
 ```
 
 # Run pipeline {-}
-Now that the sample data sheet and parameters are defined, the pipeline can now be run.
-
-This pipeline is based around the targets package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
+Now that the sample data sheet and parameters are defined, the pipeline steps can now be visualised, and then run automatically.
 
 ## Visualise the pipeline steps
 
@@ -374,3 +385,20 @@ tar_glimpse()
 tar_make()
 ```
 
+
+# Results
+
+After the run, two directories should have been made within the output folder, one for the unfiltered results, and another for the results after taxonomic subsetting, sample minimum abundance, and ASV minimum abundance filtering. 
+
+## Main results
+Within each of these folders there should be a series of outputs:
+
+samdf.csv - This lists the abundance of each ASV and the sample it was detected in
+taxtab.csv - This lists the heirarchial taxonomy assigned to each ASV
+samdf.csv - This is the sample tracking sheet that lists the sequencing details for each sample
+ps.rds - This phyloseq object contains the information from the above 3 files, and can be analysed further using the phyloseq R package, a useful tool for plotting and statistical analysis of metabarcoding datasets: https://joey711.github.io/phyloseq/
+asvs.fasta - This contains the amplicon sequence variants infered from the dataset
+spp_sum.csv - This is a Species level summary listing the abundance of each Species and the sample it was detected in
+raw.csv - This is a large file containing all the above results in a single csv
+
+## Quality control

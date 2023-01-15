@@ -58,12 +58,12 @@ list(
   
   tar_group_by(temp_samdf1_grouped, temp_samdf1, fcid),
 
-# Sequencing run QC -------------------------------------------------------
+# Sequencing QC -------------------------------------------------------
   tar_target(seq_qc,
              temp_samdf1_grouped %>%
                 group_by(fcid) %>%
                 nest() %>%
-                mutate(seq_qc = purrr::map(fcid, step_seq_qc)),
+                mutate(seq_qc = purrr::map(fcid, step_seq_qc, quiet=FALSE, write_metrics=FALSE)),
              pattern = map(temp_samdf1_grouped), iteration = "vector"),
   
   tar_target(switching_qc,
@@ -396,8 +396,6 @@ tar_target(filtered_seqtab_path,
    return(out)
    }, format="file", iteration = "vector"),
 
-# Add some kind of summary plot!
-
 ## BLAST -------------------------------------------------------------------
  tar_target(tax_blast,
             {
@@ -432,8 +430,6 @@ tar_target(filtered_seqtab_path,
           return(out)
         }, format="file", iteration = "vector"),
  
-# Add some kind of summary plot!
-
 ### Aggregate taxonomic assignment methods-----------------------------------------------
  tar_target(joint_tax,
             {
@@ -631,7 +627,8 @@ tar_target(ps_filtered,{
                     return(physeq)
                       })) %>%
     mutate(ps_filt = purrr::pmap(dplyr::select(., ps_obj, target_kingdom, target_phylum, target_class,
-                                               target_order, target_family, target_genus, target_species, min_reads_per_sample),
+                                               target_order, target_family, target_genus, target_species, 
+                                               min_sample_reads, min_taxa_reads, min_taxa_ra),
             .f = ~{
               ..1 %>%
               step_filter_phyloseq(
@@ -642,7 +639,9 @@ tar_target(ps_filtered,{
                 family = ..6,
                 genus = ..7,
                 species = ..8,
-                min_reads=..9, 
+                min_sample_reads=..9, 
+                min_taxa_reads = ..10,
+                min_taxa_ra = ..11,
                 quiet=FALSE
               )
               }))
