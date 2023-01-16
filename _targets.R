@@ -119,10 +119,7 @@ tar_target(primer_trim_path,
                 dplyr::select(sample_id, sample_name, pcr_primers, fcid) %>%
                 left_join(params %>% 
                           dplyr::select(target_gene, pcr_primers, read_min_length, read_max_length, read_max_ee, 
-                                        read_trunc_length, read_trim_left, read_trim_right)) %>%
-                 #group_by(target_gene, pcr_primers, read_min_length, read_max_length, read_max_ee, 
-                 #         read_trunc_length, read_trim_left, read_trim_right) %>%
-                 #nest() %>%
+                                        read_trunc_length, read_trim_left, read_trim_right), by = "pcr_primers") %>%
                  mutate(read_filter = purrr::pmap(dplyr::select(., sample_id, fcid, read_min_length, read_max_length, read_max_ee, 
                                                                 read_trunc_length, read_trim_left, read_trim_right),
                    .f = ~step_filter_reads(

@@ -139,8 +139,9 @@ fs::dir_ls(path="data/K77JP", glob="*.bin") %>%
 library(targets)
 library(tarchetypes)
 
-# Load all packages using renv::restore()
+# Load all packages using renv::restore() and source package list
 renv::restore()
+source("_targets_packages.R")
 
 # Source ancillary functions
 source("R/functions.R")

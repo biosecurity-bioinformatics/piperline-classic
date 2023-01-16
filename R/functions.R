@@ -393,8 +393,9 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
 
   sample_orders <- switch_plot_dat %>%
     dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
-    group_by(Sample_Name, index, index2) %>%
-    summarise(Freq = sum(Freq))
+    group_by(index, index2) %>%
+    summarise(Freq = sum(Freq)) %>%
+    top_n(n=1, Freq)
   
   gg.switch <- switch_plot_dat %>%
     group_by(Sample_Name, index, index2) %>%
