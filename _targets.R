@@ -63,7 +63,7 @@ list(
              temp_samdf1_grouped %>%
                 group_by(fcid) %>%
                 nest() %>%
-                mutate(seq_qc = purrr::map(fcid, step_seq_qc, quiet=FALSE, write_metrics=FALSE)),
+                mutate(seq_qc = purrr::map(fcid, step_seq_qc, quiet=FALSE, write_all=FALSE)),
              pattern = map(temp_samdf1_grouped), iteration = "vector"),
   
   tar_target(switching_qc,
@@ -116,13 +116,28 @@ tar_target(primer_trim_path,
   tar_target(read_filter,
              {
              temp_samdf2 %>%
-             mutate(read_filter = purrr::pmap(dplyr::select(., sample_id, fcid),
-                   .f = ~step_read_filter(sample_id = ..1,
-                   input_dir = paste0("data/",..2,"/01_trimmed/"), output_dir = paste0("data/",..2,"/02_filtered"),
-                   maxEE = 1, truncLen = 150, rm.lowcomplex = 0,
-                   quiet = FALSE)))%>%
+                dplyr::select(sample_id, sample_name, pcr_primers, fcid) %>%
+                left_join(params %>% 
+                          dplyr::select(target_gene, pcr_primers, read_min_length, read_max_length, read_max_ee, 
+                                        read_trunc_length, read_trim_left, read_trim_right)) %>%
+                 #group_by(target_gene, pcr_primers, read_min_length, read_max_length, read_max_ee, 
+                 #         read_trunc_length, read_trim_left, read_trim_right) %>%
+                 #nest() %>%
+                 mutate(read_filter = purrr::pmap(dplyr::select(., sample_id, fcid, read_min_length, read_max_length, read_max_ee, 
+                                                                read_trunc_length, read_trim_left, read_trim_right),
+                   .f = ~step_filter_reads(
+                    sample_id = ..1,
+                    input_dir = paste0("data/",..2,"/01_trimmed/"),
+                    output_dir = paste0("data/",..2,"/02_filtered"),
+                    min_length = ..3,
+                    max_length = ..4,
+                    max_ee = ..5,
+                    trunc_length = ..6,
+                    trim_left = ..7,
+                    trim_right = ..8,
+                    rm.lowcomplex = 0,
+                    quiet = FALSE)))%>%
                  dplyr::select(sample_id, sample_name, fcid, read_filter)
-
              },                  
              pattern = map(temp_samdf2), iteration = "vector"),
 
@@ -231,7 +246,8 @@ tar_target(write_postfilt_qualplots, {
                                                          input_dir = paste0("data/",.x,"/02_filtered"),
                                                          output = paste0("output/rds/",.x,"_seqtab.rds"),
                                                          qc_dir = paste0("output/logs/",.x),
-                                                         quiet = FALSE)
+                                                         quiet = FALSE,
+                                                         write_all = FALSE)
              ))
              },
              pattern = map(temp_samdf3_grouped), iteration = "vector"),
@@ -282,15 +298,15 @@ tar_target(subset_seqtab_path,
 #  Filter ASV's per locus -------------------------------------------------
  tar_target(filtered_seqtab, {
           temp_samdf3 %>%
-           dplyr::select(-one_of("min_length", "max_length", "phmm", "coding", "genetic_code"))%>%
-           left_join(params %>% dplyr::select(pcr_primers, min_length, max_length, phmm, coding, genetic_code)) %>%
-           group_by(pcr_primers, min_length, max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
+           dplyr::select(-one_of("asv_min_length", "asv_max_length", "phmm", "coding", "genetic_code"))%>%
+           left_join(params %>% dplyr::select(pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code)) %>%
+           group_by(pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
            nest() %>%
            mutate(subset_seqtab = purrr::map(pcr_primers, ~{
                 readRDS(subset_seqtab_path[str_detect(subset_seqtab_path, .x)])
            })) %>%
            ungroup()%>%
-           mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, min_length, max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
+           mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
                .f = ~step_filter_asvs(
                seqtab = ..2,
                output = paste0("output/rds/",..1,"_seqtab.cleaned.rds"),
@@ -576,7 +592,7 @@ tar_target(assignment_plot, {
                               }))
 }, iteration = "vector"),
 
-# Write out postfilt qualplots
+# Write out assignment plot
 tar_target(write_assignment_plot, {
   assignment_plot %>% 
     group_by(target_gene) %>%
@@ -608,7 +624,8 @@ tar_target(write_assignment_plot, {
   tar_target(ps_summary, {
     out <- ps %>%
      readRDS()%>%
-     step_output_summary(out_dir="output/results/unfiltered", type="unfiltered")
+     step_output_summary(out_dir="output/results/unfiltered", rank="Species", type="unfiltered") %>%
+     step_output_ps(out_dir="output/results/unfiltered")
     return(out)
   }, format="file", iteration = "vector"),
   
@@ -655,15 +672,8 @@ tar_target(ps_filtered,{
 tar_target(ps_filt_summary, {
   out <- ps_filtered %>%
     readRDS()%>%
-    step_output_summary(out_dir="output/results/filtered", type="filtered")
-  return(out)
-}, format="file", iteration = "vector"),
-
-## Output imappests format -----------------------------------------------
-tar_target(ps_imap_output, {
-           out <- ps_filtered %>%
-             readRDS()%>%
-           step_output_imap(out_dir="output/results/final")
+    step_output_summary(out_dir="output/results/filtered", rank="Species", type="filtered")%>%
+    step_output_ps(out_dir="output/results/filtered")
   return(out)
 }, format="file", iteration = "vector"),
 

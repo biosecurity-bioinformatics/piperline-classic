@@ -137,7 +137,7 @@ step_validate_samdf <- function(samdf, data_dir){
 
 # Quality control ---------------------------------------------------------
 
-step_seq_qc <- function(fcid, quiet=FALSE, write_metrics=FALSE){
+step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
   
   seq_dir <- paste0("data/", fcid, "/")
   qc_dir <- paste0("output/logs/", fcid,"/" )
@@ -167,7 +167,7 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_metrics=FALSE){
   ## Sequencing run quality check using savR
   fc <- savR::savR(seq_dir)
   
-  if(write_metrics){
+  if(write_all){
     readr::write_csv(savR::correctedIntensities(fc), normalizePath(paste0(qc_dir, "/correctedIntensities.csv")))
     readr::write_csv(savR::errorMetrics(fc), normalizePath(paste0(qc_dir, "/errorMetrics.csv")))
     readr::write_csv(savR::extractionMetrics(fc), normalizePath(paste0(qc_dir, "/extractionMetrics.csv")))
@@ -291,7 +291,7 @@ step_multiqc <- function(fcid, quiet=FALSE){
 
 
 
-step_switching_calc <- function(fcid, multithread=FALSE, quiet=FALSE){
+step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, quiet=FALSE){
   
   seq_dir <- paste0("data/", fcid, "/")
   qc_dir <- paste0("output/logs/", fcid,"/" )
@@ -335,6 +335,7 @@ step_switching_calc <- function(fcid, multithread=FALSE, quiet=FALSE){
     dplyr::left_join(indices, by=c("index", "index2")) %>%
     tidyr::drop_na()
   
+  # Get other undetermined reads which had completely unapplied indexes
   other_reads <- anti_join(indices,combos, by=c("index", "index2")) %>%
     dplyr::summarise(sum = sum(Freq)) %>%
     dplyr::pull(sum)
@@ -355,13 +356,50 @@ step_switching_calc <- function(fcid, multithread=FALSE, quiet=FALSE){
     res <- tibble(expected = sum(switched$Freq), observed=0, switch_rate=0)
   }
   
-  readr::write_csv(res, normalizePath(paste0(qc_dir, "index_switching.csv")))
-  
   if(!quiet){message("Index switching rate calculated as: ", res$switch_rate)}
   
-  #Plot switching
-  # Need to find a way to collapse all indexes by hamming distance for this plot
-  gg.switch <- switched %>%
+  #Plot switching - handling barcode mismatch during demultiplexing 
+ 
+  # Get a list of orignally applied indexes - Could get this from sample sheet instead
+  applied_indices <- switched %>%
+    dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
+    group_by(Sample_Name) %>%
+    group_modify(~{
+        .x %>%
+          dplyr::top_n(n=1, Freq) %>%
+          dplyr::slice(1) %>%  # Handle ties
+          dplyr::mutate(Freq = sum(.x$Freq)) 
+    })
+  
+  # Update indexes using their hamming distance to those originally appliex
+  switch_plot_dat <- switched %>%
+    mutate(index = purrr::map(index, ~{
+      index_list <- applied_indices$index
+      index_dist <- stringdist(.x,index_list)
+      # Remove those above barcode_mismatch threshold
+      index_list <- index_list[index_dist <= barcode_mismatch]
+      index_dist <- index_dist[index_dist <= barcode_mismatch]
+      return(index_list[which.min(index_dist)])
+    })) %>%
+    mutate(index2 = purrr::map(index2, ~{
+      index_list <- applied_indices$index2
+      index_dist <- stringdist(.x,index_list)
+      # Remove those above barcode_mismatch threshold
+      index_list <- index_list[index_dist <= barcode_mismatch]
+      index_dist <- index_dist[index_dist <= barcode_mismatch]
+      return(index_list[which.min(index_dist)])
+    })) %>%
+    unnest(c(index, index2)) 
+
+  sample_orders <- switch_plot_dat %>%
+    dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
+    group_by(Sample_Name, index, index2) %>%
+    summarise(Freq = sum(Freq))
+  
+  gg.switch <- switch_plot_dat %>%
+    group_by(Sample_Name, index, index2) %>%
+    summarise(Freq = sum(Freq))%>%
+    mutate(index = factor(index, levels=sample_orders$index), index2=factor(index2, levels=rev(sample_orders$index2)))  %>%
     ggplot(aes(x = index, y = index2), stat="identity") +
     geom_tile(aes(fill = Freq),alpha=0.8)  + 
     scale_fill_viridis_c(name="log10 Reads", begin=0.1, trans="log10")+
@@ -374,9 +412,9 @@ step_switching_calc <- function(fcid, multithread=FALSE, quiet=FALSE){
       "Total Reads: ", sum(indices$Freq),
       ", Switch rate: ", sprintf("%1.4f%%", res$switch_rate*100),
       ", other Reads: ", other_reads)) 
-  pdf(file=normalizePath(paste0(qc_dir, "/index_switching.pdf")), width = 11, height = 8 , paper="a4r")
-  plot(gg.switch)
-  try(dev.off(), silent=TRUE)
+  pdf(file=normalizePath(paste0(qc_dir, fcid,"_index_switching.pdf")), width = 11, height = 8 , paper="a4r")
+    plot(gg.switch)
+    try(dev.off(), silent=TRUE)
   return(res)
 }
 
@@ -621,7 +659,11 @@ step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_prime
   return(res)
 }
 
-step_read_filter <- function(sample_id, input_dir, output_dir, quiet=FALSE, ...){
+
+# Read filtering
+step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20, max_length = Inf,
+                              max_ee = 1, trunc_length = 150, trim_left = 0, trim_right = 0,
+                              quiet=FALSE, ...){
   input_dir <- normalizePath(input_dir)
   output_dir <- normalizePath(output_dir)
   
@@ -641,7 +683,9 @@ step_read_filter <- function(sample_id, input_dir, output_dir, quiet=FALSE, ...)
   res <- dada2::filterAndTrim(
     fwd = fastqFs, filt = file.path(output_dir, basename(fastqFs)),
     rev = fastqRs, filt.rev = file.path(output_dir, basename(fastqRs)),
-    rm.phix = TRUE, multithread = FALSE, compress = TRUE, verbose = !quiet) %>% #, ...
+    minLen = min_length, maxLen = max_length, maxEE = max_ee, truncLen = trunc_length,
+    trimLeft = trim_left, trimRight = trim_right, rm.phix = TRUE, 
+    multithread = FALSE, compress = TRUE, verbose = !quiet) %>% 
     as_tibble() %>%
     dplyr::rename(filter_input = reads.in,
                   filter_output = reads.out) %>%
@@ -839,7 +883,8 @@ trim_primers <- function(fwd, rev, fwd_out, rev_out, for_primer_seq, rev_primer_
 #  DADA2 ------------------------------------------------------------------
 
 
-step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE, pool="pseudo",   quiet=FALSE){
+step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE, pool="pseudo",
+                       write_all =FALSE, quiet=FALSE){
   
   input_dir <- normalizePath(input_dir)
   output <- normalizePath(output)
@@ -854,10 +899,12 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
                       randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
   
   #write out errors for diagnostics
-  write_csv(as.data.frame(errF$trans), paste0(qc_dir, "/", fcid, "_errF_observed_transitions.csv"))
-  write_csv(as.data.frame(errF$err_out), paste0(qc_dir, "/", fcid, "_errF_inferred_errors.csv"))
-  write_csv(as.data.frame(errR$trans), paste0(qc_dir, "/", fcid, "_errR_observed_transitions.csv"))
-  write_csv(as.data.frame(errR$err_out), paste0(qc_dir, "/", fcid, "_errR_inferred_errors.csv"))
+  if(write_all){
+    write_csv(as.data.frame(errF$trans), paste0(qc_dir, "/", fcid, "_errF_observed_transitions.csv"))
+    write_csv(as.data.frame(errF$err_out), paste0(qc_dir, "/", fcid, "_errF_inferred_errors.csv"))
+    write_csv(as.data.frame(errR$trans), paste0(qc_dir, "/", fcid, "_errR_observed_transitions.csv"))
+    write_csv(as.data.frame(errR$err_out), paste0(qc_dir, "/", fcid, "_errR_inferred_errors.csv"))
+  }
   
   ##output error plots to see how well the algorithm modelled the errors in the different runs
   p1 <- plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
@@ -874,9 +921,11 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   # merge reads
   mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE) 
   mergers <- mergers[sapply(mergers, nrow) > 0]
-  bind_rows(mergers, .id="Sample") %>%
-    mutate(Sample = str_replace(Sample, pattern="_S.*$", replacement="")) %>%
-    write_csv(paste0(qc_dir, "/", fcid, "_mergers.csv"))
+  if(write_all){
+    bind_rows(mergers, .id="Sample") %>%
+      mutate(Sample = str_replace(Sample, pattern="_S.*$", replacement="")) %>%
+      write_csv(paste0(qc_dir, "/", fcid, "_mergers.csv"))
+  }
   
   #Construct sequence table
   seqtab <- makeSequenceTable(mergers)
@@ -1004,7 +1053,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
       !OTU %in% getSequences(seqtab_cut) ~ "Incorrect size",
       !OTU %in% getSequences(seqtab_phmm) ~ "PHMM",
       !OTU %in% getSequences(seqtab_final) ~ "Stop codons",
-      TRUE ~ "Real"
+      TRUE ~ "Retained"
     )) 
   write_csv(cleanup, paste0(qc_dir,"/ASV_cleanup_summary.csv"))
   
@@ -1017,7 +1066,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
     geom_histogram() + 
     labs(title = "Number of unique sequences")
   
-  pdf(paste0(qc_dir,"/seqtab_length_dist.pdf"), width = 11, height = 8 , paper="a4r")
+  pdf(paste0(qc_dir,"/ASV_cleanup_summary.pdf"), width = 11, height = 8 , paper="a4r")
   plot(gg.abundance / gg.unique)
   try(dev.off(), silent=TRUE)
   
@@ -1450,7 +1499,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
 }
 
 # Export samples
-step_output_summary <- function(ps, out_dir, type="unfiltered"){
+step_output_summary <- function(ps, rank="Species", out_dir, type="unfiltered"){
   #Export raw csv
   speedyseq::psmelt(ps) %>%
     filter(Abundance > 0) %>%
@@ -1458,16 +1507,12 @@ step_output_summary <- function(ps, out_dir, type="unfiltered"){
     write_csv(normalizePath(paste0(out_dir,"/raw_", type,".csv")))
   
   # Export species level summary of filtered results
-  seqateurs::summarise_taxa(ps, "Species", "sample_id") %>%
+  seqateurs::summarise_taxa(ps, rank=rank, "sample_id") %>%
     spread(key="sample_id", value="totalRA") %>%
     write.csv(file = normalizePath(paste0(out_dir,"/spp_sum_",type,".csv")))
-  
-  seqateurs::summarise_taxa(ps, "Genus", "sample_id") %>%
-    spread(key="sample_id", value="totalRA") %>%
-    write.csv(file =  normalizePath(paste0(out_dir,"/gen_sum_",type,".csv")))
-  
+
   #Output fasta of all ASV's
-  seqateurs::ps_to_fasta(ps, normalizePath(paste0(out_dir,"/asvs_",type,".fasta")), seqnames="Species")
+  seqateurs::ps_to_fasta(ps, normalizePath(paste0(out_dir,"/asvs_",type,".fasta")), seqnames=rank)
   
   out_paths <- c(
     paste0(out_dir,"/raw_", type,".csv"),
@@ -1483,7 +1528,7 @@ step_output_summary <- function(ps, out_dir, type="unfiltered"){
   return(out_paths)
 }
 
-step_output_imap <- function(ps, out_dir){
+step_output_ps <- function(ps, out_dir, type="unfiltered"){
   seqtab <- otu_table(ps) %>%
     as("matrix") %>%
     as_tibble(rownames = "sample_id")
@@ -1499,25 +1544,21 @@ step_output_imap <- function(ps, out_dir){
           Database requires the columns: OTU, Root, Kingdom, Phylum, Class, Order, Family, Genus, Species ")
   }
   
-  #if(any(str_detect(taxtab$Species, "/"), na.rm=TRUE)){
-  #  message("Warning: Taxonomy table contains taxa with clashes at the species level, these should be corrected before upload:")
-  #  clashes <- taxtab$Species[str_detect(taxtab$Species, "/")]
-  #  print(clashes[!is.na(clashes)])
-  #}
-  
   samdf <- sample_data(ps) %>%
     as("matrix") %>%
     as_tibble()
   
   # Write out
-  write_csv(seqtab, normalizePath(paste0(out_dir,"/seqtab.csv")))
-  write_csv(taxtab, normalizePath(paste0(out_dir,"/taxtab.csv")))
-  write_csv(samdf, normalizePath(paste0(out_dir,"/samdf.csv")))
+  write_csv(seqtab, normalizePath(paste0(out_dir,"/seqtab_",type,".csv")))
+  write_csv(taxtab, normalizePath(paste0(out_dir,"/taxtab_",type,".csv")))
+  write_csv(samdf, normalizePath(paste0(out_dir,"/samdf_",type,".csv")))
+  saveRDS(ps, paste0(out_dir,"/ps_",type,".rds"))
   
   out_paths <- c(
-    paste0(out_dir,"/seqtab.csv"),
-    paste0(out_dir,"/taxtab.csv"),
-    paste0(out_dir,"/samdf.csv")
+    paste0(out_dir,"/seqtab_",type,".csv"),
+    paste0(out_dir,"/taxtab_",type,".csv"),
+    paste0(out_dir,"/samdf_",type,".csv"),
+    paste0(out_dir,"/ps_",type,".rds")
   )
   return(out_paths)
 }

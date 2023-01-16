@@ -305,10 +305,22 @@ params <- tibble(
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
   ref_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds","reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
   blast_db = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz", "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
-  min_length = c(195, 207),
-  max_length = c(215, 227),
+  
+  # Read filtering
+  read_min_length = 20,
+  read_max_length = Inf,
+  read_max_ee = 1,
+  read_trunc_length = 150,
+  read_trim_left = 0,
+  read_trim_right = 0,
+  
+  # ASV filtering
+  asv_min_length = c(195, 207),
+  asv_max_length = c(215, 227),
   genetic_code = c("SGC4", "SGC0"),
   coding = c(TRUE, TRUE),
+  
+  # Taxonomic filtering
   target_kingdom = c("Metazoa", "Metazoa"),
   target_phylum = c("Arthropoda","Arthropoda"),
   target_class = c("Insecta", "Insecta"),
@@ -316,6 +328,8 @@ params <- tibble(
   target_family = c(NA_character_, NA_character_), 
   target_genus = c(NA_character_, NA_character_),  
   target_species= c(NA_character_, NA_character_),  
+  
+  # Sample & Taxon filtering
   min_sample_reads = c(1000, 1000),
   min_taxa_reads= c(NA_integer_, NA_integer_ ), # Minimum reads per ASV to retain
   min_taxa_ra = c(1e-4, 1e-4), # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
