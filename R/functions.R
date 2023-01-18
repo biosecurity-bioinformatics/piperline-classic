@@ -5,35 +5,35 @@
 #Update the sample sheet and logging sheet to deal with any newly demultiplexed files
 step_demux_samdf <- function(samdf){
     out <- samdf %>%
-      group_by(sample_id) %>%
+      dplyr::group_by(sample_id) %>%
       group_split() %>%
       purrr::map(function(x){
-        if(any(str_detect(x$pcr_primers, ";"), na.rm = TRUE)){
-          primer_names <- unlist(str_split(unique(x$pcr_primers), ";")) 
+        if(any(stringr::str_detect(x$pcr_primers, ";"), na.rm = TRUE)){
+          primer_names <- unlist(stringr::str_split(unique(x$pcr_primers), ";")) 
           x <- x %>% 
-            mutate(count = length(primer_names)) %>% #Replicate the samples
+            dplyr::mutate(count = length(primer_names)) %>% #Replicate the samples
             uncount(count) %>%
-            mutate(pcr_primers = unlist(str_split(unique(x$pcr_primers), ";")),
-                   for_primer_seq = unlist(str_split(unique(x$for_primer_seq), ";")),
-                   rev_primer_seq = unlist(str_split(unique(x$rev_primer_seq), ";")),
+            dplyr::mutate(pcr_primers = unlist(stringr::str_split(unique(x$pcr_primers), ";")),
+                   for_primer_seq = unlist(stringr::str_split(unique(x$for_primer_seq), ";")),
+                   rev_primer_seq = unlist(stringr::str_split(unique(x$rev_primer_seq), ";")),
                    sample_id = paste0(sample_id, "_",pcr_primers)
             ) 
         }
-        if(!all(str_detect(x$sample_id, x$pcr_primers))){
+        if(!all(stringr::str_detect(x$sample_id, x$pcr_primers))){
           x <- x %>%
-            mutate(sample_id = paste0(sample_id, "_",pcr_primers))
+            dplyr::mutate(sample_id = paste0(sample_id, "_",pcr_primers))
         }
         return(x)
       }) %>%
-      bind_rows()
+      dplyr::bind_rows()
     
     # Check if files exist
     data_folders <- paste0(list.dirs("data", recursive=FALSE), "/01_trimmed")
     fastqFs <- purrr::map(data_folders,list.files, pattern="_R1_", full.names = TRUE) %>%
       unlist() %>%
-      str_remove(pattern = "^(.*)\\/") %>%
-      str_remove(pattern = "(?:.(?!_S))+$")
-    fastqFs <- fastqFs[!str_detect(fastqFs, "Undetermined")]
+      stringr::str_remove(pattern = "^(.*)\\/") %>%
+      stringr::str_remove(pattern = "(?:.(?!_S))+$")
+    fastqFs <- fastqFs[!stringr::str_detect(fastqFs, "Undetermined")]
     #Check missing fastqs
     if (length(setdiff(out$sample_id, fastqFs)) > 0) {
       warning(paste0("The fastq file: ",
@@ -52,11 +52,11 @@ step_add_params <- function(samdf, params){
 }
 
 step_check_files <- function(samdf, files){
-  fastqFs <- files[str_detect(files, "_R1_")]
+  fastqFs <- files[stringr::str_detect(files, "_R1_")]
   fastqFs <- basename(fastqFs) %>%
-    str_remove(pattern = "^(.*)\\/") %>%
-    str_remove(pattern = "(?:.(?!_S))+$")
-  fastqFs <- fastqFs[!str_detect(fastqFs, "Undetermined")]
+    stringr::str_remove(pattern = "^(.*)\\/") %>%
+    stringr::str_remove(pattern = "(?:.(?!_S))+$")
+  fastqFs <- fastqFs[!stringr::str_detect(fastqFs, "Undetermined")]
   
   #Check missing in samplesheet
   if (length(setdiff(fastqFs, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(fastqFs, samdf$sample_id), " are not in the sample sheet") }
@@ -93,8 +93,8 @@ step_validate_folders <- function(project_dir){
 step_validate_samdf <- function(samdf, data_dir){
   # Check if sampleids contain fcid, if not; attatch
   samdf <- samdf %>%
-    mutate(sample_id = case_when(
-      !str_detect(sample_id, fcid) ~ paste0(fcid,"_",sample_id),
+    dplyr::mutate(sample_id = case_when(
+      !stringr::str_detect(sample_id, fcid) ~ paste0(fcid,"_",sample_id),
       TRUE ~ sample_id
     ))
   
@@ -103,9 +103,9 @@ step_validate_samdf <- function(samdf, data_dir){
   fastqFs <- purrr::map(list.dirs(data_dir, recursive=FALSE),
                         list.files, pattern="_R1_", full.names = TRUE) %>%
     unlist() %>%
-    str_remove(pattern = "^(.*)\\/") %>%
-    str_remove(pattern = "(?:.(?!_S))+$")
-  fastqFs <- fastqFs[!str_detect(fastqFs, "Undetermined")]
+    stringr::str_remove(pattern = "^(.*)\\/") %>%
+    stringr::str_remove(pattern = "(?:.(?!_S))+$")
+  fastqFs <- fastqFs[!stringr::str_detect(fastqFs, "Undetermined")]
   #Check missing in samplesheet
   if (length(setdiff(fastqFs, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(fastqFs, samdf$sample_id), " are not in the sample sheet") }
   
@@ -114,9 +114,9 @@ step_validate_samdf <- function(samdf, data_dir){
   fastqRs <- purrr::map(list.dirs(data_dir, recursive=FALSE),
                         list.files, pattern="_R2_", full.names = TRUE) %>%
     unlist() %>%
-    str_remove(pattern = "^(.*)\\/") %>%
-    str_remove(pattern = "(?:.(?!_S))+$")
-  fastqRs <- fastqRs[!str_detect(fastqRs, "Undetermined")]
+    stringr::str_remove(pattern = "^(.*)\\/") %>%
+    stringr::str_remove(pattern = "(?:.(?!_S))+$")
+  fastqRs <- fastqRs[!stringr::str_detect(fastqRs, "Undetermined")]
   
   #Check missing in samplesheet
   if (length(setdiff(fastqFs, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(fastqFs, samdf$sample_id), " are not in the sample sheet") }
@@ -179,8 +179,8 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
     dplyr::group_by(tile, lane) %>%
     dplyr::summarise(Average_intensity = mean(avg_intensity), .groups="drop") %>% 
     dplyr::mutate(side = case_when(
-      str_detect(tile, "^11") ~ "Top",
-      str_detect(tile, "^21") ~ "Bottom"
+      stringr::str_detect(tile, "^11") ~ "Top",
+      stringr::str_detect(tile, "^21") ~ "Bottom"
     ))%>%
     ggplot(aes(x=lane, y=as.factor(tile), fill=Average_intensity)) +
     geom_tile() +
@@ -209,7 +209,7 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
       code == 100 ~ "reads_total",
       code == 101 ~ "reads_pf"
     ),fcid = stringr::str_remove(fc@flowcell, "^.*-")) %>% 
-    group_by(fcid, code) %>%
+    dplyr::group_by(fcid, code) %>%
     dplyr::summarise(reads = sum(value), .groups="drop") %>%
     tidyr::pivot_wider(names_from = code,
                        values_from = reads)
@@ -298,10 +298,14 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   
   # Check that required files exist
   if(!dir.exists(seq_dir)) {
-    stop("seq_dir doesnt exist, check that the correct path was provided")
+    stop("input directory doesnt exist, check that the correct path was provided")
   }
-  if(!any(str_detect(list.files(seq_dir, pattern="_R1_", full.names = TRUE), "Undetermined"), na.rm = TRUE)){
-    stop("Error, an Undetermined reads fastq must be present to calculate index switching")
+  
+  # Check if undetermined reads file exists
+  if(!any(stringr::str_detect(list.files(seq_dir, pattern="_R1_", full.names = TRUE), "Undetermined"), na.rm = TRUE)){
+    warning("Error, an Undetermined reads fastq must be present to calculate index switching")
+    res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_)
+    return(res)
   }
   # Create qc_dir if it doesnt exist
   if(!dir.exists(qc_dir)) {dir.create(qc_dir, recursive = TRUE)}
@@ -319,6 +323,8 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
     dplyr::mutate(Sample_Name = Sample_Name %>% 
                     stringr::str_remove(pattern = "^(.*)\\/") %>%
                     stringr::str_remove(pattern = "(?:.(?!_S))+$"))
+  
+  # Ensure indices are present
   if(all(is.na(indices$Freq))){
     warning(paste0("No index sequences present in fastq headers for run", fcid, " no switch rate calculated"))
     res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_)
@@ -326,7 +332,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   }
   
   combos <- indices %>% 
-    dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
+    dplyr::filter(!stringr::str_detect(Sample_Name, "Undetermined")) %>%
     dplyr::select(index, index2) %>%
     tidyr::expand(index, index2)
   
@@ -334,6 +340,24 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   switched <- combos %>%
     dplyr::left_join(indices, by=c("index", "index2")) %>%
     tidyr::drop_na()
+  
+  # Get a list of orignally applied indexes - Could get this from sample sheet instead
+  applied_indices <- switched %>%
+    dplyr::filter(!stringr::str_detect(Sample_Name, "Undetermined")) %>%
+    dplyr::group_by(Sample_Name) %>%
+    group_modify(~{
+      .x %>%
+        dplyr::top_n(n=1, Freq) %>%
+        dplyr::slice(1) %>%  # Handle ties
+        dplyr::mutate(Freq = sum(.x$Freq)) 
+    })
+  
+  # Check if indices are combinatorial
+  if(any(duplicated(applied_indices$index)) | any(duplicated(applied_indices$index2))){
+    warning(paste0("Combinatorial indexes detected for", fcid, " no switch rate calculated"))
+    res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_)
+    return(res)
+  }
   
   # Get other undetermined reads which had completely unapplied indexes
   other_reads <- anti_join(indices,combos, by=c("index", "index2")) %>%
@@ -360,20 +384,9 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   
   #Plot switching - handling barcode mismatch during demultiplexing 
  
-  # Get a list of orignally applied indexes - Could get this from sample sheet instead
-  applied_indices <- switched %>%
-    dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
-    group_by(Sample_Name) %>%
-    group_modify(~{
-        .x %>%
-          dplyr::top_n(n=1, Freq) %>%
-          dplyr::slice(1) %>%  # Handle ties
-          dplyr::mutate(Freq = sum(.x$Freq)) 
-    })
-  
   # Update indexes using their hamming distance to those originally appliex
   switch_plot_dat <- switched %>%
-    mutate(index = purrr::map(index, ~{
+    dplyr::mutate(index = purrr::map(index, ~{
       index_list <- applied_indices$index
       index_dist <- stringdist(.x,index_list)
       # Remove those above barcode_mismatch threshold
@@ -381,7 +394,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
       index_dist <- index_dist[index_dist <= barcode_mismatch]
       return(index_list[which.min(index_dist)])
     })) %>%
-    mutate(index2 = purrr::map(index2, ~{
+    dplyr::mutate(index2 = purrr::map(index2, ~{
       index_list <- applied_indices$index2
       index_dist <- stringdist(.x,index_list)
       # Remove those above barcode_mismatch threshold
@@ -389,18 +402,18 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
       index_dist <- index_dist[index_dist <= barcode_mismatch]
       return(index_list[which.min(index_dist)])
     })) %>%
-    unnest(c(index, index2)) 
+    tidyr::unnest(c(index, index2)) 
 
   sample_orders <- switch_plot_dat %>%
-    dplyr::filter(!str_detect(Sample_Name, "Undetermined")) %>%
-    group_by(index, index2) %>%
+    dplyr::filter(!stringr::str_detect(Sample_Name, "Undetermined")) %>%
+    dplyr::group_by(index, index2) %>%
     summarise(Freq = sum(Freq)) %>%
     top_n(n=1, Freq)
   
   gg.switch <- switch_plot_dat %>%
-    group_by(Sample_Name, index, index2) %>%
+    dplyr::group_by(Sample_Name, index, index2) %>%
     summarise(Freq = sum(Freq))%>%
-    mutate(index = factor(index, levels=sample_orders$index), index2=factor(index2, levels=rev(sample_orders$index2)))  %>%
+    dplyr::mutate(index = factor(index, levels=sample_orders$index), index2=factor(index2, levels=rev(sample_orders$index2)))  %>%
     ggplot(aes(x = index, y = index2), stat="identity") +
     geom_tile(aes(fill = Freq),alpha=0.8)  + 
     scale_fill_viridis_c(name="log10 Reads", begin=0.1, trans="log10")+
@@ -629,20 +642,20 @@ step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_prime
     # Define outfiles
     fwd_out <- purrr::map(primer_names, ~{
       new_sampleid <- paste0(sample_id, "_",.x)
-      return(normalizePath(paste0(output_dir,"/", str_replace(basename(fastqFs), sample_id, new_sampleid))))
+      return(normalizePath(paste0(output_dir,"/", stringr::str_replace(basename(fastqFs), sample_id, new_sampleid))))
     }) %>%
       unlist()
     rev_out <- purrr::map(primer_names, ~{
       new_sampleid <- paste0(sample_id, "_",.x)
-      return(normalizePath(paste0(output_dir,"/", str_replace(basename(fastqRs), sample_id, new_sampleid))))
+      return(normalizePath(paste0(output_dir,"/", stringr::str_replace(basename(fastqRs), sample_id, new_sampleid))))
     }) %>%
       unlist()
     
   } else if (!multi_primer) {
     # CHange this to rename samples if primers not present
     new_sampleid <- paste0(sample_id, "_",pcr_primers)
-    fwd_out <- normalizePath(paste0(output_dir,"/", str_replace(basename(fastqFs), sample_id, new_sampleid)))
-    rev_out <- normalizePath(paste0(output_dir,"/", str_replace(basename(fastqRs), sample_id, new_sampleid)))
+    fwd_out <- normalizePath(paste0(output_dir,"/", stringr::str_replace(basename(fastqFs), sample_id, new_sampleid)))
+    rev_out <- normalizePath(paste0(output_dir,"/", stringr::str_replace(basename(fastqRs), sample_id, new_sampleid)))
   } 
   
   # Demultiplex reads and trim primers
@@ -650,12 +663,12 @@ step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_prime
                      rev = fastqRs,
                      fwd_out = fwd_out,
                      rev_out = rev_out,
-                     for_primer_seq = str_replace_all(for_primer_seq, "I", "N"),
-                     rev_primer_seq = str_replace_all(rev_primer_seq, "I", "N"),
+                     for_primer_seq = stringr::str_replace_all(for_primer_seq, "I", "N"),
+                     rev_primer_seq = stringr::str_replace_all(rev_primer_seq, "I", "N"),
                      n = n, qualityType = qualityType, check_paired = check_paired,
                      compress =compress, quiet=quiet
   ) %>%
-    mutate(fwd_out = fwd_out,
+    dplyr::mutate(fwd_out = fwd_out,
            rev_out = rev_out)
   return(res)
 }
@@ -690,7 +703,7 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
     as_tibble() %>%
     dplyr::rename(filter_input = reads.in,
                   filter_output = reads.out) %>%
-    mutate(fwd_out = file.path(output_dir, basename(fastqFs)),
+    dplyr::mutate(fwd_out = file.path(output_dir, basename(fastqFs)),
            rev_out = file.path(output_dir, basename(fastqRs)))
 
   if(res$filter_output > 0){
@@ -923,8 +936,8 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE) 
   mergers <- mergers[sapply(mergers, nrow) > 0]
   if(write_all){
-    bind_rows(mergers, .id="Sample") %>%
-      mutate(Sample = str_replace(Sample, pattern="_S.*$", replacement="")) %>%
+    dplyr::bind_rows(mergers, .id="Sample") %>%
+      dplyr::mutate(Sample = stringr::str_replace(Sample, pattern="_S.*$", replacement="")) %>%
       write_csv(paste0(qc_dir, "/", fcid, "_mergers.csv"))
   }
   
@@ -938,7 +951,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
     magrittr::set_colnames(c("dadaFs", "dadaRs", "merged")) %>%
     as.data.frame() %>%
     rownames_to_column("sample_id") %>%
-    mutate(sample_id = str_replace(basename(sample_id), pattern="_S.*$", replacement="")) %>%
+    dplyr::mutate(sample_id = stringr::str_replace(basename(sample_id), pattern="_S.*$", replacement="")) %>%
     as_tibble()
   return(res)
 }
@@ -949,15 +962,10 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
 # Group by target loci and apply
 step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_length = NULL, 
                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
-  # Print arguments for testing
-  #print(as.list(match.call()))
-  
-  #argg <- c(as.list(environment()), list(...))
-  # print(argg)
-  
+
   if(is.matrix(seqtab) | is.data.frame(seqtab)){
     if(!quiet){message("Input is a matrix or data frame")}
-  } else if (is.character(seqtab) & str_detect(seqtab, ".rds")){
+  } else if (is.character(seqtab) & stringr::str_detect(seqtab, ".rds")){
     seqtab <- readRDS(seqtab)
   } else {
     stop("seqtab must be a matrix/data frame or .rds file")
@@ -970,7 +978,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   reads_chimerafilt <- rowSums(seqtab_nochim)
   
   #cut to expected size allowing for some codon indels - do separately for each loci
-  if(any(!is.null(c(min_length, max_length)), na.rm = TRUE)){
+  if(any(!is.null(c(min_length, max_length)), na.rm = TRUE) & any(reads_chimerafilt > 0)){
     if(!is.null(min_length) & !is.null(max_length)){
       seqtab_cut <- seqtab_nochim[,nchar(colnames(seqtab_nochim)) %in% min_length:max_length]
     } else if(is.null(min_length) & !is.null(max_length)){
@@ -986,11 +994,12 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
     reads_lengthfilt <- rowSums(seqtab_cut)
   } else {
     seqtab_cut <- seqtab_nochim
-    reads_lengthfilt <- rep(NA_integer_,nrow(seqtab)) 
+    reads_lengthfilt <- rep(0,nrow(seqtab)) 
+    names(reads_lengthfilt) <- rownames(seqtab)
   }
   
   # Load in profile hidden markov model if provided
-  if(is.character(phmm) && str_detect(phmm, ".rds")){
+  if(is.character(phmm) && stringr::str_detect(phmm, ".rds")){
     model <- readRDS(phmm)
   } else if (is(phmm, "PHMM")){
     model <- phmm
@@ -1002,7 +1011,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   }
   
   # Align against phmm
-  if (is(model, "PHMM")){
+  if (is(model, "PHMM") & any(reads_lengthfilt > 0)){
     seqs <- DNAStringSet(colnames(seqtab_cut))
     names(seqs) <- colnames(seqtab_cut)
     phmm_filt <- taxreturn::map_to_model(
@@ -1017,11 +1026,12 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
     reads_phmmfilt <- rowSums(seqtab_phmm)
   } else {
     seqtab_phmm <- seqtab_cut
-    reads_phmmfilt <- rep(NA_integer_,nrow(seqtab)) 
+    reads_phmmfilt <- rep(0,nrow(seqtab)) 
+    names(reads_phmmfilt) <- rownames(seqtab)
   }
   
   #Filter sequences containing stop codons
-  if(check_frame){
+  if(check_frame & any(reads_phmmfilt > 0)){
     seqs <- DNAStringSet(colnames(seqtab_phmm))
     names(seqs) <- colnames(seqtab_phmm)
     codon_filt <- taxreturn::codon_filter(seqs, genetic_code = genetic_code) 
@@ -1034,7 +1044,8 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
     reads_framefilt <- rowSums(seqtab_final)
   } else {
     seqtab_final <- seqtab_phmm
-    reads_framefilt <- rep(NA_integer_,nrow(seqtab)) 
+    reads_framefilt <- rep(0,nrow(seqtab))
+    names(reads_framefilt) <- rownames(seqtab)
   }
   reads_final <- rowSums(seqtab_final)
   
@@ -1046,10 +1057,10 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
     pivot_longer( everything(),
                   names_to = "OTU",
                   values_to = "Abundance") %>%
-    group_by(OTU) %>%
+    dplyr::group_by(OTU) %>%
     summarise(Abundance = sum(Abundance)) %>%
-    mutate(length  = nchar(OTU)) %>%
-    mutate(type = case_when(
+    dplyr::mutate(length  = nchar(OTU)) %>%
+    dplyr::mutate(type = case_when(
       !OTU %in% getSequences(seqtab_nochim) ~ "Chimera",
       !OTU %in% getSequences(seqtab_cut) ~ "Incorrect size",
       !OTU %in% getSequences(seqtab_phmm) ~ "PHMM",
@@ -1059,21 +1070,28 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   write_csv(cleanup, paste0(qc_dir,"/ASV_cleanup_summary.csv"))
   
   # Output length distribution plots
-  gg.abundance <- ggplot(cleanup, aes(x=length, y=Abundance, fill=type))+
+  gg.abundance <- ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
     geom_bar(stat="identity") + 
-    labs(title = "Abundance of sequences")
+    scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
+    labs(title = "Abundance of sequences",
+         x = "ASV length",
+         y = "log10 ASV abundance",
+         fill = "ASV type")
   
   gg.unique <- ggplot(cleanup, aes(x=length, fill=type))+
-    geom_histogram() + 
-    labs(title = "Number of unique sequences")
+    geom_histogram(binwidth = 1) + 
+    scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
+    labs(title = "Number of unique sequences",
+         x = "ASV length",
+         y = "Number of unique sequences",
+         fill = "ASV type")
   
-  pdf(paste0(qc_dir,"/ASV_cleanup_summary.pdf"), width = 11, height = 8 , paper="a4r")
-  plot(gg.abundance / gg.unique)
-  try(dev.off(), silent=TRUE)
-  
+  # Create combined plot
+  out_plot <- gg.abundance / gg.unique
+
   # Create output
   res <- tibble(
-    sample_id = rownames(seqtab) %>% str_remove(pattern="_S.*$"),
+    sample_id = rownames(seqtab) %>% stringr::str_remove(pattern="_S.*$"),
     reads_starting = reads_starting,
     reads_chimerafilt = reads_chimerafilt,
     reads_lengthfilt = reads_lengthfilt,
@@ -1082,52 +1100,64 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
     reads_final = reads_final
   )
   return(list(filtered_seqtab = seqtab_final, 
-              filtered_asvs = res))
+              filtered_asvs = res,
+              plot = list(out_plot)))
 }
 
 
 # Taxonomic assignment ----------------------------------------------------
 
 # Group by target loci and apply
-step_assign_taxonomy <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
+step_idtaxa <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
                                  ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"), plot=FALSE){
   # Print arguments for testing
   # Load the relevent db
   trainingSet <- readRDS(normalizePath(database))
   
   # get the sequences from the seqtab
-  dna <- DNAStringSet(getSequences(seqtab)) # Create a DNAStringSet from the ASVs
-  
-  # Classify 
-  ids <- DECIPHER::IdTaxa(dna, trainingSet, processors=1, threshold = threshold, verbose=!quiet, strand = "top") 
-  
-  # Get the filename of that db that we can use to name the output files
-  db_name <- basename(database) %>% str_remove("\\..*$") %>% str_remove("_idtaxa")
-  
-  # Output plot of ids for each db
-  if(plot){
-    pdf(paste0(qc_dir,"/", db_name,"_idtaxa.pdf"), width = 11, height = 8 , paper="a4r")
-    plot(ids)
-    try(dev.off(), silent=TRUE)
-  }
-  # Check that more than just root has been assigned
-  if( any(sapply(ids, function(x){ length(x$taxon) }) > 2)){
+  seqs <- DNAStringSet(getSequences(seqtab)) # Create a DNAStringSet from the ASVs
+  # Stop if seqs are 0
+  if(length(seqs) > 0){
+      
+    # Classify 
+    ids <- DECIPHER::IdTaxa(seqs, trainingSet, processors=1, threshold = threshold, verbose=!quiet, strand = "top") 
     
-    #Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
-    tax <- t(sapply(ids, function(x) {
-      taxa <- paste0(x$taxon,"_", x$confidence)
-      taxa[startsWith(taxa, "unclassified_")] <- NA
-      taxa
-    })) %>%
-      purrr::map(unlist) %>%
-      stri_list2matrix(byrow=TRUE, fill=NA) %>%
-      magrittr::set_colnames(ranks[1:ncol(.)]) %>%
-      as.data.frame() %>%
-      magrittr::set_rownames(getSequences(seqtab)) %T>%
-      write.csv(paste0(qc_dir,"/", db_name,"_idtaxa_results.csv")) %>%  #Write out logfile with confidence levels
-      mutate_all(str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
-      magrittr::set_rownames(getSequences(seqtab)) 
+    # Get the filename of that db that we can use to name the output files
+    db_name <- basename(database) %>% stringr::str_remove("\\..*$") %>% stringr::str_remove("_idtaxa")
+    
+    # Output plot of ids for each db
+    if(plot){
+      pdf(paste0(qc_dir,"/", db_name,"_idtaxa.pdf"), width = 11, height = 8 , paper="a4r")
+      plot(ids)
+      try(dev.off(), silent=TRUE)
+    }
+    # Check that more than just root has been assigned
+    if( any(sapply(ids, function(x){ length(x$taxon) }) > 2)){
+      
+      #Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
+      tax <- t(sapply(ids, function(x) {
+        taxa <- paste0(x$taxon,"_", x$confidence)
+        taxa[startsWith(taxa, "unclassified_")] <- NA
+        taxa
+      })) %>%
+        purrr::map(unlist) %>%
+        stri_list2matrix(byrow=TRUE, fill=NA) %>%
+        magrittr::set_colnames(ranks[1:ncol(.)]) %>%
+        as.data.frame() %>%
+        magrittr::set_rownames(getSequences(seqtab)) %T>%
+        write.csv(paste0(qc_dir,"/", db_name,"_idtaxa_results.csv")) %>%  #Write out logfile with confidence levels
+        mutate_all(stringr::str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
+        magrittr::set_rownames(getSequences(seqtab)) 
+    } else {
+      warning(paste0("No sequences assigned with IDTAXA to ", database, " have you used the correct database?"))
+      tax <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") 
+      tax[ranks[1]] <- ranks[1]
+      tax[ranks[2:length(ranks)]] <- NA_character_
+      tax <- tax %>%
+        magrittr::set_rownames(getSequences(seqtab)) 
+    }
   } else {
+    warning(paste0("No sequences present in seqtab - IDTAXA skipped"))
     tax <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") 
     tax[ranks[1]] <- ranks[1]
     tax[ranks[2:length(ranks)]] <- NA_character_
@@ -1147,23 +1177,30 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
   names(seqs) <- getSequences(seqtab)
   
   # Get the filename of that db that we can use to name the output files
-  db_name <- basename(database) %>% str_remove("_.*$")
+  db_name <- basename(database) %>% stringr::str_remove("_.*$")
   
-  blast_spp <- blast_assign_species(query=seqs,db=database, identity=97, coverage=95, evalue=1e06,
-                                    max_target_seqs=5, max_hsp=5, ranks=c("Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") , delim=";") %>%
-    dplyr::rename(blast_genus = Genus, blast_spp = Species) %>%
-    dplyr::filter(!is.na(blast_spp))
-  
-  if(nrow(blast_spp) > 0){
-    # Transform into taxtab format
-    out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
-      left_join(blast_spp %>%
-        dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
-      )%>%
-      column_to_rownames("OTU") %>%
-      as.matrix()
-  } else{
-    warning(paste0("No Species assigned with BLAST to ", database, " have you used the correct database?"))
+  # Stop if seqs are 0
+  if(length(seqs) > 0){
+    blast_spp <- blast_assign_species(query=seqs,db=database, identity=97, coverage=95, evalue=1e06,
+                                      max_target_seqs=5, max_hsp=5, ranks=c("Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") , delim=";") %>%
+      dplyr::rename(blast_genus = Genus, blast_spp = Species) %>%
+      dplyr::filter(!is.na(blast_spp))
+    
+    if(nrow(blast_spp) > 0){
+      # Transform into taxtab format
+      out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
+        dplyr::left_join(blast_spp %>%
+          dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
+        )%>%
+        column_to_rownames("OTU") %>%
+        as.matrix()
+    } else{
+      warning(paste0("No Species assigned with BLAST to ", database, " have you used the correct database?"))
+      out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
+        dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
+    }
+  } else {
+    warning(paste0("No sequences present in seqtab - BLAST skipped"))
     out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
       dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
   }
@@ -1300,7 +1337,7 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
     phy <- NULL
   }
   #Extract start of sequence names
-  rownames(seqtab) <- str_replace(rownames(seqtab), pattern="_S[0-9].*$", replacement="")
+  rownames(seqtab) <- stringr::str_replace(rownames(seqtab), pattern="_S[0-9].*$", replacement="")
   
   #Load sample information
   samdf <- samdf %>%
@@ -1309,18 +1346,18 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
     magrittr::set_rownames(.$sample_id)
   
   if(is.null(phy)){
-    ps <- phyloseq(tax_table(taxtab),
-                   sample_data(samdf),
-                   otu_table(seqtab, taxa_are_rows = FALSE),
-                   refseq(seqs))
+    ps <- phyloseq(phyloseq::tax_table(taxtab),
+                   phyloseq::sample_data(samdf),
+                   phyloseq::otu_table(seqtab, taxa_are_rows = FALSE),
+                   phyloseq::refseq(seqs))
   } else {
-    ps <- phyloseq(tax_table(taxtab),
-                   sample_data(samdf),
-                   otu_table(seqtab, taxa_are_rows = FALSE),
+    ps <- phyloseq(phyloseq::tax_table(taxtab),
+                   phyloseq::sample_data(samdf),
+                   phyloseq::otu_table(seqtab, taxa_are_rows = FALSE),
                    phy_tree(phy),
-                   refseq(seqs))
+                   phyloseq::refseq(seqs))
   }
-  if(nrow(seqtab) > nrow(sample_data(ps))){
+  if(nrow(seqtab) > nrow(phyloseq::sample_data(ps))){
     message("Warning: the following samples were not included in phyloseq object, check sample names match the sample metadata")
     message(rownames(seqtab)[!rownames(seqtab) %in% sample_names(ps)])
   }
@@ -1329,7 +1366,7 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
 
 step_rareplot <- function(ps, min_reads=1000, plot_dir=NULL){
   #Create rarefaction curve
-  rare <- otu_table(ps) %>%
+  rare <- phyloseq::otu_table(ps) %>%
     as("matrix") %>%
     rarecurve(step=max(sample_sums(ps))/100) %>%
     purrr::map(function(x){
@@ -1339,16 +1376,16 @@ step_rareplot <- function(ps, min_reads=1000, plot_dir=NULL){
       return(b)
     }) %>%
     purrr::set_names(sample_names(ps)) %>%
-    bind_rows(.id="sample_id")
+    dplyr::bind_rows(.id="sample_id")
   
   gg.rare <- ggplot(data = rare)+
     geom_line(aes(x = count, y = OTU, group=sample_id), alpha=0.5)+
     geom_point(data = rare %>% 
-                 group_by(sample_id) %>% 
+                 dplyr::group_by(sample_id) %>% 
                  top_n(1, count),
                aes(x = count, y = OTU, colour=(count > min_reads))) +
     geom_label(data = rare %>% 
-                 group_by(sample_id) %>% 
+                 dplyr::group_by(sample_id) %>% 
                  top_n(1, count),
                aes(x = count, y = OTU,label=sample_id, colour=(count > min_reads)),
                hjust=-0.05)+
@@ -1370,13 +1407,13 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
                                  min_sample_reads=1000, min_taxa_reads=NA, min_taxa_ra = NA, quiet=FALSE){
   
   #Taxonomic filtering
-  taxtab <- tax_table(ps) %>%
+  taxtab <- phyloseq::tax_table(ps) %>%
     as("data.frame")
   
   # Filter kingdom
   ps0 <- ps
   if(!is.na(kingdom)){
-    if (any(str_detect(taxtab$Kingdom, kingdom))){
+    if (any(stringr::str_detect(taxtab$Kingdom, kingdom))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Kingdom",
@@ -1390,7 +1427,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   # Filter phylum
   ps0 <- ps
   if(!is.na(phylum)){
-    if (any(str_detect(taxtab$Phylum, phylum))){
+    if (any(stringr::str_detect(taxtab$Phylum, phylum))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Phylum",
@@ -1404,7 +1441,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   # Filter class
   ps0 <- ps
   if(!is.na(class)){
-    if (any(str_detect(taxtab$Class, class))){
+    if (any(stringr::str_detect(taxtab$Class, class))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Class",
@@ -1418,7 +1455,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   # Filter order
   ps0 <- ps
   if(!is.na(order)){
-    if (any(str_detect(taxtab$Order, order))){
+    if (any(stringr::str_detect(taxtab$Order, order))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Order",
@@ -1432,7 +1469,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   # Filter family
   ps0 <- ps
   if(!is.na(family)){
-    if (any(str_detect(taxtab$Family, family))){
+    if (any(stringr::str_detect(taxtab$Family, family))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Family",
@@ -1446,7 +1483,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   # Filter genus
   ps0 <- ps
   if(!is.na(family)){
-    if (any(str_detect(taxtab$Genus, genus))){
+    if (any(stringr::str_detect(taxtab$Genus, genus))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Genus",
@@ -1460,7 +1497,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   # Filter Species
   ps0 <- ps
   if(!is.na(family)){
-    if (any(str_detect(taxtab$Species, species))){
+    if (any(stringr::str_detect(taxtab$Species, species))){
       ps0 <- ps0 %>%
         subset_taxa_new(
           rank = "Species",
@@ -1510,15 +1547,14 @@ step_output_summary <- function(ps, rank="Species", out_dir, type="unfiltered"){
   # Export species level summary of filtered results
   seqateurs::summarise_taxa(ps, rank=rank, "sample_id") %>%
     spread(key="sample_id", value="totalRA") %>%
-    write.csv(file = normalizePath(paste0(out_dir,"/spp_sum_",type,".csv")))
+    write.csv(file = normalizePath(paste0(out_dir,"/",rank,"_",type,"summary.csv")))
 
   #Output fasta of all ASV's
   seqateurs::ps_to_fasta(ps, normalizePath(paste0(out_dir,"/asvs_",type,".fasta")), seqnames=rank)
   
   out_paths <- c(
     paste0(out_dir,"/raw_", type,".csv"),
-    paste0(out_dir,"/spp_sum_",type,".csv"),
-    paste0(out_dir,"/gen_sum_",type,".csv"),
+    paste0(out_dir,"/",rank,"_",type,"summary.csv"),
     paste0(out_dir,"/asvs_",type,".fasta")
   )
   if(!is.null(phy_tree(ps, errorIfNULL = FALSE))){
@@ -1530,11 +1566,11 @@ step_output_summary <- function(ps, rank="Species", out_dir, type="unfiltered"){
 }
 
 step_output_ps <- function(ps, out_dir, type="unfiltered"){
-  seqtab <- otu_table(ps) %>%
+  seqtab <- phyloseq::otu_table(ps) %>%
     as("matrix") %>%
     as_tibble(rownames = "sample_id")
   
-  taxtab <- tax_table(ps) %>%
+  taxtab <- phyloseq::tax_table(ps) %>%
     as("matrix") %>%
     as_tibble(rownames = "OTU") %>%
     unclassified_to_na(rownames = FALSE)
@@ -1545,7 +1581,7 @@ step_output_ps <- function(ps, out_dir, type="unfiltered"){
           Database requires the columns: OTU, Root, Kingdom, Phylum, Class, Order, Family, Genus, Species ")
   }
   
-  samdf <- sample_data(ps) %>%
+  samdf <- phyloseq::sample_data(ps) %>%
     as("matrix") %>%
     as_tibble()
   
@@ -1606,36 +1642,213 @@ remove_if_exists <- function(file, quiet=FALSE){
   }
 }
 
-fastqc_install <- function (url, dest_dir = "bin", dest.dir = "bin", force = FALSE) {
-  if (!missing("dest.dir")) {
-    warning("Argument dest.dir is deprecated, use dest_dir instead")
-    dest_dir <- dest.dir
+create_samplesheet <- function(SampleSheet, runParameters, template = "V4"){
+  if (missing(runParameters)) {stop("Error: need to provide a runParameters file in .xml format")}
+  if (missing(SampleSheet)) {stop("Error: need to provide a SampleSheet file in .csv format")}
+  if (length(SampleSheet) > 1) {multi <- TRUE}
+  if (!length(SampleSheet) == length(runParameters)) {
+    stop("Error: you have provided ", length(SampleSheet) , " SampleSheets and ", length(runParameters), " runParameters files. One of each must be provided per run")
   }
-  if (missing(url)) {
-    download_page <- xml2::read_html("http://www.bioinformatics.babraham.ac.uk/projects/download.html")
-    link_hrefs <- download_page %>% rvest::html_nodes("a") %>% 
-      rvest::html_attr("href")
-    fastqc_href <- grep("fastqc/fastqc.*.zip", link_hrefs, 
-                        perl = TRUE) %>% link_hrefs[.] %>% .[1]
-    url <- paste0("http://www.bioinformatics.babraham.ac.uk/projects/", 
-                  fastqc_href)
+  
+  #Parse files
+  merged <- purrr::map2(SampleSheet, runParameters, parse_seqrun) %>%
+    dplyr::bind_rows()
+  
+  # Reformat to the format required
+  if (is.character(template) && template=="V4"){
+    # Define template fields
+    template_fields <- c("sample_id", "sample_name", "extraction_rep", "amp_rep", "client_name", 
+                         "experiment_name", "sample_type", "collection_method", "collection_location", "lat_lon",
+                         "environment", "collection_date", "operator_name", "description", "assay",
+                         "extraction_method", "amp_method", "target_gene", "pcr_primers", "for_primer_seq",
+                         "rev_primer_seq", "index_plate", "index_well", "i7_index_id", "i7_index",
+                         "i5_index_id", "i5_index", "seq_platform", "fcid", "for_read_length", 
+                         "rev_read_length", "seq_run_id", "seq_id", "seq_date", "analysis_method",
+                         "notes"
+    )
+  } else if (any(class(template) == "data.frame")){
+    template_fields <- colnames(template)
+  } else {
+    stop("Error, only template='V4' or a user provided data framecurrently supported")
   }
-  if (!dir.exists(dest_dir)) {
-    dir.create(dest_dir)
+  
+  # lookup table for renaming
+  lookup <- c(i7_index = "index",
+              i5_index = "index2",
+              index_plate = "sample_plate",
+              index_well = "sample_well",
+              operator_name = "investigator_name",
+              client_name = "project_name",
+              seq_id = "instrument_name",
+              seq_date = "run_start_date",
+              seq_run_id = "run_id")
+  
+  matching <- merged %>%
+    janitor::clean_names()%>%
+    rename(any_of(lookup)) %>%
+    dplyr::select_if(names(.) %in% template_fields)
+  matching[,setdiff(template_fields, colnames(matching))] <- NA
+  out <- matching %>%
+    dplyr::select(all_of(template_fields))
+  
+  message(paste0(length(unique(out$sample_id))," samples total"))
+  return(out)
+}
+
+parse_seqrun <- function(SampleSheet, runParameters){
+  if (missing(runParameters)) {stop("Error: need to provide a runParameters file in .xml format")}
+  if (missing(SampleSheet)) {stop("Error: need to provide a SampleSheet file in .csv format")}
+  if (!length(SampleSheet) == length(runParameters)) {stop("Error: SampleSheet and RunParameters need to be provided for every run")}
+  #detect format for run
+  if(any(stringr::str_detect(readr::read_lines(runParameters), "MiSeq"))){
+    format <- "miseq"
+    sampleskip <- 20
+    header_n_max <- 19
+    reads_skip <- 12
+  } else if (any(stringr::str_detect(readr::read_lines(runParameters), "novaseq"))){
+    format <- "novaseq"
+    sampleskip = 19
+    header_n_max = 18
+    reads_skip = 11
+  } else if (any(stringr::str_detect(readr::read_lines(runParameters), "hiseq"))){
+    format <- "hiseq"
+    stop("Error: HiSeq not currently supported")
+  } else if (any(stringr::str_detect(readr::read_lines(runParameters), "nextseq"))){
+    format <- "nextseq"
+    stop("Error: NextSeq not currently supported")
+  } else if (any(stringr::str_detect(readr::read_lines(runParameters), "iseq"))){
+    format <- "iseq"
+    stop("Error: iSeq not currently supported")
+  } else(
+    stop("Error: compatable platfrom not detected in runParameters file")
+  )
+  # Read in samplesheet from run
+  sample_sheet <- readr::read_csv(SampleSheet, skip=sampleskip, col_types = cols(
+    Sample_ID = col_character(),
+    Sample_Name = col_character(),
+    Sample_Plate = col_character(),
+    Sample_Well = col_character(),
+    I7_Index_ID = col_character(),
+    index = col_character(),
+    I5_Index_ID = col_character(),
+    index2 = col_character(),
+    Sample_Project = col_character()
+  ))
+  
+  withCallingHandlers({ # Handle Annoying missing columns function
+    sample_header <- readr::read_csv(SampleSheet, n_max=header_n_max) %>%
+      dplyr::select(1:2) %>%
+      magrittr::set_colnames(c("var", "value")) %>%
+      tidyr::drop_na(var) %>%
+      dplyr::mutate(var = var %>%
+                      str_replace_all("InvestigatorName", "Investigator_Name") %>% #Convert camel to snake case
+                      str_replace_all("ExperimentName", "Experiment_Name") %>%
+                      str_replace(" ", "_") %>%
+                      make.unique() %>%
+                      str_replace("\\.1", "_R")
+      ) %>%
+      tibble::column_to_rownames("var") %>%
+      t() %>%
+      tibble::as_tibble() %>%
+      dplyr::select_if(names(.) %in% c('Investigator_Name', 'Project_Name', 'Experiment_Name', 'Assay', 'Adapter'))
+    
+    reads <- readr::read_csv(SampleSheet, skip=reads_skip, n_max=2, col_types = cols_only(
+      `[Reads]` = col_number() )) %>%
+      pull(`[Reads]`)
+    reads <- tibble::tibble(for_read_length = reads[1], rev_read_length = reads[2])
+  },
+  warning=function(w) {if (startsWith(conditionMessage(w), "Missing column names"))
+    invokeRestart("muffleWarning")})
+  
+  # Read runparameters xml
+  xmlFromRunParameters <- XML::xmlParse(runParameters)
+  run_params <- XML::xmlToDataFrame(nodes = XML::getNodeSet(xmlFromRunParameters, "/RunParameters")) %>%
+    as.data.frame(stringsAsFactors=FALSE )
+  
+  if(format == "miseq"){
+    run_params <- run_params %>%
+      dplyr::mutate(FlowCellExpiry = FlowcellRFIDTag %>%
+                      stringr::str_replace("^.{0,23}", "") %>%
+                      stringr::str_replace(".{0,9}$", "") %>%
+                      as.Date(),
+                    ReagentKitExpiry = ReagentKitRFIDTag %>%
+                      stringr::str_replace("^.{0,23}", "") %>%
+                      stringr::str_replace(".{0,9}$", "") %>%
+                      as.Date(),
+                    PR2Expiry = PR2BottleRFIDTag %>%
+                      stringr::str_replace("^.{0,23}", "") %>%
+                      stringr::str_replace(".{0,9}$", "") %>%
+                      as.Date(),
+                    FCID = Barcode %>%
+                      stringr::str_replace("^.{0,10}", ""),
+                    RunStartDate = lubridate::ymd(RunStartDate)
+      ) %>%
+      dplyr::rename( InstrumentName = ScannerID
+      ) %>%
+      dplyr::select(
+        RunID,
+        InstrumentName,
+        RunNumber,
+        FCID,
+        RunStartDate,
+        PR2BottleBarcode,
+        ReagentKitBarcode,
+        FlowCellExpiry,
+        ReagentKitExpiry,
+        PR2Expiry,
+        MostRecentWashType) %>%
+      dplyr::mutate_if(is.factor, as.character)
+    
+  } else if(format == "novaseq"){
+    run_params <- run_params %>%
+      dplyr::mutate(RunStartDate = lubridate::ymd(RunStartDate),
+                    RunID = RunId
+      ) %>%
+      dplyr::select(
+        RunID,
+        InstrumentName,
+        RunNumber,
+        RunStartDate) %>%
+      dplyr::mutate_if(is.factor, as.character)
+    
+    RFIDS <- XML::xmlToDataFrame(nodes = XML::getNodeSet(xmlFromRunParameters, "//RfidsInfo"))%>%
+      as.data.frame(stringsAsFactors=FALSE) %>%
+      dplyr::rename(
+        FCID = FlowCellSerialBarcode,
+        LibTubeID = LibraryTubeSerialBarcode,
+        SbsID = SbsSerialBarcode,
+        ClusterID = ClusterSerialBarcode,
+        BufferID = BufferSerialBarcode,
+      ) %>%
+      dplyr::mutate(
+        FlowCellExpiry = lubridate::mdy(str_remove(FlowCellExpirationdate," 00:00:00")),
+        SbsExpiry = lubridate::mdy(str_remove(SbsExpirationdate," 00:00:00")),
+        ClusterExpiry = lubridate::mdy(str_remove(ClusterExpirationdate," 00:00:00")),
+        BufferExpiry = lubridate::mdy(str_remove(BufferExpirationdate," 00:00:00")),
+      )%>%
+      dplyr::select(
+        FCID,
+        LibTubeID,
+        ClusterID,
+        SbsID,
+        BufferID,
+        FlowCellExpiry,
+        SbsExpiry,
+        ClusterExpiry,
+        BufferExpiry
+      ) %>%
+      dplyr::mutate_if(is.factor, as.character)
+    run_params <- dplyr::bind_cols(run_params, RFIDS)
   }
-  if (dir.exists(paste0(dest_dir, "/fastQC")) && force == FALSE) {
-    message("Skipped as FASTQC already exists in directory, to overwrite set force to TRUE")
-    return(NULL)
-  } else if (dir.exists(paste0(dest_dir, "/fastQC")) && force == TRUE) {
-    unlink(paste0(dest_dir, "/fastQC"), recursive = TRUE)
-  }
-  destfile <- file.path(dest_dir, basename(url))
-  if (exists(destfile)) {
-    file.remove(destfile)
-  }
-  httr::GET(url, httr::write_disk(destfile, overwrite = TRUE))
-  utils::unzip(destfile, exdir = dest_dir)
-  file.remove(destfile)
+  
+  #Merge different sheets
+  combined <- sample_sheet %>%
+    cbind(sample_header) %>%
+    cbind(reads) %>%
+    cbind(run_params)
+  message("Combined sample sheets for: ")
+  message(paste0(unique(combined[]$FCID)," ", format, "\n"))
+  return(combined)
 }
 
 # Phyloseq utilities ------------------------------------------------------
@@ -1687,16 +1900,16 @@ phyloseq_filter_sample_wise_abund_trim <- function(physeq, minabund = 10, relabu
 
 # New subset taxa function that allows variable column inputs
 subset_taxa_new <- function(physeq, rank, value){
-  if (is.null(tax_table(physeq))) {
+  if (is.null(phyloseq::tax_table(physeq))) {
     cat("Nothing subset. No taxonomyTable in physeq.\n")
     return(physeq)
   } else {
-    oldMA <- as(tax_table(physeq), "matrix")
+    oldMA <- as(phyloseq::tax_table(physeq), "matrix")
     oldDF <- data.frame(oldMA)
     newDF <- oldDF %>%
       dplyr::filter(UQ(sym(rank)) == value)
     newMA <- as(newDF, "matrix")
-    tax_table(physeq) <- tax_table(newMA)
+    phyloseq::tax_table(physeq) <- phyloseq::tax_table(newMA)
     return(physeq)
   }
 }
