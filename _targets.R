@@ -726,7 +726,7 @@ tar_target(read_tracking, {
     as.matrix()
     
   read_tracker <- temp_samdf1 %>%
-    dplyr::select(sample_name, fcid) %>%
+    dplyr::select(sample_name, fcid, pcr_primers) %>%
     dplyr::left_join(primer_trim%>%
                 tidyr::unnest(primer_trim) %>%
                 dplyr::select(sample_name, fcid, trimmed_input, trimmed_output, fwd_out) %>%
@@ -759,7 +759,7 @@ tar_target(read_tracking, {
                 rename_with(~stringr::str_to_lower(.), everything()) %>%
                 rename_with(~stringr::str_c("classified_", .), -sample_id), by="sample_id")  %>%
     dplyr::select(any_of(c(
-      "sample_name","sample_id", "fcid", "input_reads", "trimmed", "filtered",
+      "sample_name","sample_id", "pcr_primers", "fcid", "input_reads", "trimmed", "filtered",
       "denoised", "chimerafilt", "lengthfilt", "phmmfilt", "framefilt", 
       "classified_root", "classified_kingdom", "classified_phylum","classified_class",
       "classified_order", "classified_family", "classified_genus", "classified_species"
@@ -768,16 +768,16 @@ tar_target(read_tracking, {
   write_csv(read_tracker, "output/logs/read_tracker.csv")
 
   gg.read_tracker <- read_tracker %>%
-    pivot_longer(cols = -c("sample_name", "sample_id", "fcid"),
+    pivot_longer(cols = -c("sample_name", "sample_id", "fcid", "pcr_primers"),
                  names_to = "step",
                  values_to="reads") %>%
     dplyr::mutate(step = factor(step, levels=c(
-      "sample_name","sample_id", "fcid", "input_reads", "trimmed", "filtered",
+      "input_reads", "trimmed", "filtered",
       "denoised", "chimerafilt", "lengthfilt", "phmmfilt", "framefilt", 
       "classified_root", "classified_kingdom", "classified_phylum","classified_class",
       "classified_order", "classified_family", "classified_genus", "classified_species"
     ))) %>%
-    ggplot(aes(x = step, y = reads))+
+    ggplot(aes(x = step, y = reads, fill=pcr_primers))+
     geom_col() +
     scale_y_continuous(labels = scales::label_number_si())+
     facet_grid(fcid~.)+
@@ -789,12 +789,13 @@ tar_target(read_tracking, {
       plot.background = element_blank(),
       text = element_text(size=9, family = ""),
       axis.text = element_text(size=8, family = ""),
-      legend.position = "none",
+      legend.position = "right",
       panel.border = element_rect(colour = "black", fill=NA, size=0.5),
       panel.grid = element_line(size = rel(0.5)),
     ) +
     labs(x = "Pipeline step",
-         y = "Reads retained")
+         y = "Reads retained",
+         fill = "PCR primers")
   pdf(file=paste0("output/logs/read_tracker.pdf"), width = 11, height = 8 , paper="a4r")
     print(gg.read_tracker)
   try(dev.off(), silent=TRUE)
