@@ -320,7 +320,7 @@ tar_target(subset_seqtab_path,
          unnest_wider(filtered_seqtab) %>%
          dplyr::mutate(filtered_asvs = purrr::map(filtered_asvs, ~{
            .x %>%
-             dplyr::select(-sample_id) # remove sample_id from the nested column to avoid m
+             dplyr::select(-sample_id) # remove sample_id from the nested column to avoid duplicate name columns
          })) %>%
          tidyr::unnest(c(data, filtered_asvs))%>%
          dplyr::select(sample_id, sample_name, fcid, reads_starting, reads_chimerafilt, pcr_primers, reads_lengthfilt,
@@ -375,7 +375,6 @@ tar_target(write_seqtab_qualplots, {
    }, format="file", iteration = "vector"),
 
 # Assign taxonomy ---------------------------------------------------------
- # # Track the taxonomy files - could join these similar to the way im joining the eqtab again
   tar_file(ref_db_tracked,
            params  %>%
              dplyr::pull(ref_db) %>%
@@ -406,12 +405,12 @@ tar_target(write_seqtab_qualplots, {
      dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
        readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
      }))  %>%
-     dplyr::mutate(idtaxa = purrr::pmap(list(target_gene, filtered_seqtab, ref_db2),
+     dplyr::mutate(idtaxa = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, ref_db2),
                                  .f = ~step_idtaxa(
-                                   seqtab = ..2,
-                                   database = ..3,
+                                   seqtab = ..3,
+                                   database = ..4,
                                    ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"),
-                                   output = paste0("output/rds/",basename(..3) %>% stringr::str_remove("\\..*$"),"_taxtab.rds"),
+                                   output = paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_taxtab.rds"),
                                    qc_dir = "output/logs/",
                                    threshold = 60,
                                    multithread = FALSE, 
@@ -419,7 +418,7 @@ tar_target(write_seqtab_qualplots, {
                                    plot=TRUE)
      ))%>%
      tidyr::unnest(data)
-   out <- paste0("output/rds/",unique(basename(process$ref_db)  %>% stringr::str_remove("\\..*$")),"_taxtab.rds")
+   out <- paste0("output/rds/",unique(process$pcr_primers),"_",unique(basename(process$ref_db)  %>% stringr::str_remove("\\..*$")),"_taxtab.rds")
    return(out)
    }, format="file", iteration = "vector"),
 
@@ -439,12 +438,12 @@ tar_target(write_seqtab_qualplots, {
              dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
                readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
              }))  %>%
-             dplyr::mutate(blast = purrr::pmap(list(target_gene, filtered_seqtab, blast_db2),
+             dplyr::mutate(blast = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, blast_db2),
                                         .f = ~step_blast_tophit(
-                                          seqtab = ..2,
-                                          database = ..3,
+                                          seqtab = ..3,
+                                          database = ..4,
                                           ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") ,
-                                          output = paste0("output/rds/",basename(..3) %>% stringr::str_remove("\\..*$"),"_blast.rds"),
+                                          output = paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_blast.rds"),
                                           qc_dir = "output/logs/",
                                           identity = 97,  
                                           coverage=95,
@@ -454,45 +453,28 @@ tar_target(write_seqtab_qualplots, {
                                           multithread = FALSE, 
                                           quiet = FALSE)
            ))
-          out <- paste0("output/rds/",unique(basename(process$blast_db)  %>% stringr::str_remove("\\..*$")),"_blast.rds")
+          out <- paste0("output/rds/",unique(process$pcr_primers), "_",unique(basename(process$blast_db)  %>% stringr::str_remove("\\..*$")),"_blast.rds")
           return(out)
         }, format="file", iteration = "vector"),
  
 ### Aggregate taxonomic assignment methods-----------------------------------------------
+# Need to edit this to detect the PCR_primers as well
  tar_target(joint_tax,
             {
-            process <- temp_samdf3 %>%
+             process <- temp_samdf3 %>%
               dplyr::select(-one_of("target_gene"))%>%
               dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, ref_db, blast_db)) %>%
-              dplyr::group_by(target_gene) %>%
+              dplyr::group_by(pcr_primers) %>%
               tidyr::nest() %>% 
-              dplyr::mutate(idtaxa = purrr::map(data, ~{
+              dplyr::mutate(idtaxa = purrr::map2(data, pcr_primers, ~{
                 ref_dbs <- .x %>%
                   tidyr::separate_rows(ref_db, sep=";") %>%
                   dplyr::pull(ref_db) %>%
                   unique() %>%
                   basename() %>% 
                   stringr::str_remove("\\..*$")
-                taxtabs <- tax_idtaxa[stringr::str_detect(tax_idtaxa, ref_dbs)] %>%
+                taxtabs <- tax_idtaxa[stringr::str_detect(tax_idtaxa, ref_dbs)& stringr::str_detect(tax_idtaxa, .y)] %>%
                   purrr::map(readRDS)
-               if(length(taxtabs) == 1){
-                 out <- taxtabs[[1]]
-               } else if(length(taxtabs) == 2){
-                 out <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
-               } else if(length(taxtabs) == 3){
-                 temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
-                 out <- coalesce_tax(temptax, taxtabs[[3]])
-               } 
-             }),
-              blast = purrr::map(data, ~{
-                blast_dbs <- .x %>%
-                  tidyr::separate_rows(blast_db, sep=";") %>%
-                  dplyr::pull(blast_db) %>%
-                  unique() %>%
-                  basename() %>% 
-                  stringr::str_remove("\\..*$")
-                taxtabs <- tax_blast[stringr::str_detect(tax_blast, blast_dbs)]%>%
-                 purrr::map(readRDS)
                 if(length(taxtabs) == 1){
                   out <- taxtabs[[1]]
                 } else if(length(taxtabs) == 2){
@@ -500,23 +482,41 @@ tar_target(write_seqtab_qualplots, {
                 } else if(length(taxtabs) == 3){
                   temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
                   out <- coalesce_tax(temptax, taxtabs[[3]])
-                } 
+                }
+                return(out)
+              }),
+              blast = purrr::map2(data,pcr_primers, ~{
+                blast_dbs <- .x %>%
+                  tidyr::separate_rows(blast_db, sep=";") %>%
+                  dplyr::pull(blast_db) %>%
+                  unique() %>%
+                  basename() %>% 
+                  stringr::str_remove("\\..*$")
+                taxtabs <- tax_blast[stringr::str_detect(tax_blast, blast_dbs) & stringr::str_detect(tax_blast, .y)]%>%
+                  purrr::map(readRDS)
+                if(length(taxtabs) == 1){
+                  out <- taxtabs[[1]]
+                } else if(length(taxtabs) == 2){
+                  out <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
+                } else if(length(taxtabs) == 3){
+                  temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
+                  out <- coalesce_tax(temptax, taxtabs[[3]])
+                }
+                return(out)
               })) %>%
-              dplyr::mutate(joint_tax = purrr::pmap(list(target_gene, idtaxa, blast),
-                                             .f = ~step_join_tax_blast(
-                                               tax = ..2,
-                                               blast_spp = ..3,
-                                               ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") ,
-                                               output = paste0("output/rds/",..1,"_taxblast.rds"),
-                                               propagate_tax = TRUE)
+              dplyr::mutate(joint_tax = purrr::pmap(list(pcr_primers, idtaxa, blast),
+                                                     .f = ~step_join_tax_blast(
+                                                       tax = ..2,
+                                                       blast_spp = ..3,
+                                                       ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") ,
+                                                       output = paste0("output/rds/",..1,"_taxblast.rds"),
+                                                       propagate_tax = TRUE)
               )) %>%
               tidyr::unnest(data)
-            out <- paste0("output/rds/",unique(process$target_gene),"_taxblast.rds")
+            out <- paste0("output/rds/",unique(process$pcr_primers),"_taxblast.rds")
             return(out)
            }, format="file", iteration = "vector"),
 
-# Add some kind of summary plot!
- 
 ### Merge taxonomy tables  -----------------------------------------------------
  tar_target(merged_tax,
             {
@@ -529,10 +529,11 @@ tar_target(write_seqtab_qualplots, {
                                             taxtabs <- joint_tax
                                             taxtabs <- taxtabs[taxtabs %>%
                                                                  purrr::map_lgl(function(y){
-                                                                   any(stringr::str_detect(y, unique(.x$target_gene)))
+                                                                   any(stringr::str_detect(y, unique(.x$pcr_primers)))
                                                                  })]
                                             tax <- taxtabs %>%
-                                              purrr::map(readRDS) %>%
+                                              purrr::map(readRDS) 
+                                            tax <- tax[sapply(tax, nrow) >0 ] %>%
                                               dplyr::bind_rows() %>%
                                               as.matrix()
                                             saveRDS(tax, "output/rds/final_tax.rds")
@@ -556,12 +557,12 @@ tar_target(assignment_plot, {
     dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
     }))   %>%
-    dplyr::mutate(tax = purrr::map(target_gene, ~{
+    dplyr::mutate(tax = purrr::map(pcr_primers, ~{
       readRDS(joint_tax[stringr::str_detect(joint_tax, .x)])%>% 
         seqateurs::unclassified_to_na(rownames=FALSE) %>%
         dplyr::mutate(lowest = seqateurs::lowest_classified(.)) 
     })) %>%
-    dplyr::mutate(blast = purrr::pmap(list(target_gene, filtered_seqtab, blast_db),
+    dplyr::mutate(blast = purrr::pmap(list(pcr_primers, filtered_seqtab, blast_db),
                                .f = ~{
                                  seqs <- colnames(..2)
                                  names(seqs) <- colnames(..2)
@@ -591,8 +592,9 @@ tar_target(assignment_plot, {
                                   NULL
                                  }
     })) %>%
-    dplyr::mutate(plot = purrr::pmap(list(target_gene, joint, ref_db, blast_db),
+    dplyr::mutate(plot = purrr::pmap(list(pcr_primers, joint, ref_db, blast_db),
                               .f= ~{
+                                # ADD TITLES HERE!
                                 if(!is.null(..2)){
                                   ..2 %>%
                                     dplyr::select(pident, rank = lowest) %>%
@@ -600,6 +602,7 @@ tar_target(assignment_plot, {
                                     ggplot(aes(x=pident, fill=rank))+ 
                                     geom_histogram(colour="black", binwidth = 1, position = "stack") + 
                                     labs(title = paste0(..1, " Top hit identity distribution"),
+                                         subtitle = paste0("IDTAXA database:", ..3, " BLAST database:", ..4),
                                          x = "BLAST top hit % identity",
                                          y = "OTUs") + 
                                     scale_x_continuous(breaks=seq(60,100,2)) +
@@ -623,16 +626,10 @@ tar_target(assignment_plot, {
 
 # Write out assignment plot
 tar_target(write_assignment_plot, {
-  assignment_plot %>% 
-    dplyr::group_by(target_gene) %>%
-    tidyr::nest() %>%
-    purrr::pwalk(list(target_gene, data),
-                 .f = ~{
-                   pdf(file=paste0("output/logs/",..1,"_taxonomic_assignment.pdf"), width = 11, height = 8 , paper="a4r")
-                   print(..2$plot)
-                   try(dev.off(), silent=TRUE)
-                 })
-  out <- paste0("output/logs/",unique(assignment_plot$target_gene),"_taxonomic_assignment.pdf")
+  pdf(file=paste0("output/logs/taxonomic_assignment_summary.pdf"), width = 11, height = 8 , paper="a4r")
+  print(unique(assignment_plot$plot))
+  try(dev.off(), silent=TRUE)
+  out <- paste0("output/logs/taxonomic_assignment_summary.pdf")
   return(out)
 }, format="file", iteration = "vector"),
 
@@ -727,13 +724,13 @@ tar_target(read_tracking, {
     
   read_tracker <- temp_samdf1 %>%
     dplyr::select(sample_name, fcid, pcr_primers) %>%
-    dplyr::left_join(primer_trim%>%
+    dplyr::left_join(primer_trim %>%
                 tidyr::unnest(primer_trim) %>%
                 dplyr::select(sample_name, fcid, trimmed_input, trimmed_output, fwd_out) %>%
-                dplyr::mutate(sample_id = basename(fwd_out) %>% stringr::str_remove("_S[0-9].*$")) %>%
+                dplyr::mutate(sample_id = basename(fwd_out) %>% stringr::str_remove("_S[0-9]+_R[1-2]_.*$")) %>%
                 dplyr::select(sample_name, sample_id, fcid, input_reads=trimmed_input, trimmed=trimmed_output), by = c("sample_name", "fcid")) %>%
-    dplyr::left_join(read_filter%>%
-                tidyr::unnest(read_filter)%>%
+    dplyr::left_join(read_filter %>%
+                tidyr::unnest(read_filter) %>%
                 dplyr::select(sample_name, sample_id, fcid, filtered = filter_output),
               by = c("sample_name", "fcid", "sample_id")) %>%
     dplyr::left_join(dada %>% 

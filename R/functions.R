@@ -937,7 +937,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   mergers <- mergers[sapply(mergers, nrow) > 0]
   if(write_all){
     dplyr::bind_rows(mergers, .id="Sample") %>%
-      dplyr::mutate(Sample = stringr::str_replace(Sample, pattern="_S.*$", replacement="")) %>%
+      dplyr::mutate(Sample = stringr::str_remoce(Sample, pattern="_S[0-9]+_R[1-2]_.*$")) %>%
       write_csv(paste0(qc_dir, "/", fcid, "_mergers.csv"))
   }
   
@@ -951,7 +951,8 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
     magrittr::set_colnames(c("dadaFs", "dadaRs", "merged")) %>%
     as.data.frame() %>%
     rownames_to_column("sample_id") %>%
-    dplyr::mutate(sample_id = stringr::str_replace(basename(sample_id), pattern="_S.*$", replacement="")) %>%
+    dplyr::mutate(sample_id = stringr::str_remove(basename(sample_id), pattern="_S[0-9]+_R[1-2]_.*$")) %>%
+    #"_S[0-9]+_R[1-2]_.*$"
     as_tibble()
   return(res)
 }
@@ -1091,7 +1092,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
 
   # Create output
   res <- tibble(
-    sample_id = rownames(seqtab) %>% stringr::str_remove(pattern="_S.*$"),
+    sample_id = rownames(seqtab) %>% stringr::str_remove(pattern="_S[0-9]+_R[1-2]_.*$"),
     reads_starting = reads_starting,
     reads_chimerafilt = reads_chimerafilt,
     reads_lengthfilt = reads_lengthfilt,
@@ -1248,20 +1249,22 @@ coalesce_tax <- function (x, y, suffix = c(".x", ".y"), prefer="left", join = dp
 
 step_join_tax_blast <- function(tax, blast_spp, output=NULL, propagate_tax=FALSE,
                           ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")){
+  if(nrow(tax) > 0 & nrow(blast_spp) > 0){
+    #Set BLAST ids where tax isnt at genus level to NA
+    disagreements <- !blast_spp[,1] == tax[,7]
+    disagreements[is.na(disagreements)] <- TRUE
+    blast_spp[,1][disagreements] <- NA
+    blast_spp[,2][disagreements] <- NA
+    
+    # Join the two taxonomies, prefering names from the tax
+    tax_blast <- coalesce_tax(tax, blast_spp)
   
-  #Set BLAST ids where tax isnt at genus level to NA
-  disagreements <- !blast_spp[,1] == tax[,7]
-  disagreements[is.na(disagreements)] <- TRUE
-  blast_spp[,1][disagreements] <- NA
-  blast_spp[,2][disagreements] <- NA
-  
-  
-  # Join the two taxonomies, prefering names from the tax
-  tax_blast <- coalesce_tax(tax, blast_spp)
-
-  if(propagate_tax){
-    tax_blast <- tax_blast %>%
-      seqateurs::na_to_unclassified() #Propagate high order ranks to unassigned ASVs
+    if(propagate_tax){
+      tax_blast <- tax_blast %>%
+        seqateurs::na_to_unclassified() #Propagate high order ranks to unassigned ASVs
+    }
+  } else {
+    tax_blast <- as.matrix(tax)
   }
   # Write taxonomy table for that db to disk
   if(!is.null(output)){saveRDS(tax_blast, output)}
@@ -1337,7 +1340,7 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
     phy <- NULL
   }
   #Extract start of sequence names
-  rownames(seqtab) <- stringr::str_replace(rownames(seqtab), pattern="_S[0-9].*$", replacement="")
+  rownames(seqtab) <- stringr::str_remove(rownames(seqtab), pattern="_S[0-9]+_R[1-2]_.*$")
   
   #Load sample information
   samdf <- samdf %>%
