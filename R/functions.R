@@ -1109,8 +1109,9 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
 # Taxonomic assignment ----------------------------------------------------
 
 # Group by target loci and apply
-step_idtaxa <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
-                                 ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"), plot=FALSE){
+step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
+                        ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"),
+                        return_ids=FALSE){
   # Print arguments for testing
   # Load the relevent db
   trainingSet <- readRDS(normalizePath(database))
@@ -1126,12 +1127,6 @@ step_idtaxa <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, m
     # Get the filename of that db that we can use to name the output files
     db_name <- basename(database) %>% stringr::str_remove("\\..*$") %>% stringr::str_remove("_idtaxa")
     
-    # Output plot of ids for each db
-    if(plot){
-      pdf(paste0(qc_dir,"/", db_name,"_idtaxa.pdf"), width = 11, height = 8 , paper="a4r")
-      plot(ids)
-      try(dev.off(), silent=TRUE)
-    }
     # Check that more than just root has been assigned
     if( any(sapply(ids, function(x){ length(x$taxon) }) > 2)){
       
@@ -1145,8 +1140,7 @@ step_idtaxa <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, m
         stri_list2matrix(byrow=TRUE, fill=NA) %>%
         magrittr::set_colnames(ranks[1:ncol(.)]) %>%
         as.data.frame() %>%
-        magrittr::set_rownames(getSequences(seqtab)) %T>%
-        write.csv(paste0(qc_dir,"/", db_name,"_idtaxa_results.csv")) %>%  #Write out logfile with confidence levels
+        #magrittr::set_rownames(getSequences(seqtab)) %>%
         mutate_all(stringr::str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
         magrittr::set_rownames(getSequences(seqtab)) 
     } else {
@@ -1170,8 +1164,14 @@ step_idtaxa <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, m
     stop("Number of ASVs classified does not match the number of input ASVs")
   }
   
-  if(!is.null(output)){saveRDS(tax, output)}
-  return(tax)
+  # Return objects
+  if(return_ids){
+    out <- list(tax = tax,
+                ids = ids)
+  } else {
+    out <- tax
+  }
+  return(out)
 }
 
 step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 97,  coverage=95, evalue=1e06,

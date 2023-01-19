@@ -392,7 +392,7 @@ tar_target(write_seqtab_qualplots, {
 
 ## IDTAXA -------------------------------------------------------------------
  tar_target(tax_idtaxa,{ 
-   process <- temp_samdf3 %>%
+   temp_samdf3 %>%
      dplyr::select(-one_of("target_gene", "ref_db"))%>%
      dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, ref_db, idtaxa_confidence)) %>%
      tidyr::separate_rows(ref_db, sep=";") %>%
@@ -410,17 +410,53 @@ tar_target(write_seqtab_qualplots, {
                                    seqtab = ..3,
                                    database = ..4,
                                    ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"),
-                                   output = paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_taxtab.rds"),
                                    qc_dir = "output/logs/",
                                    threshold = ..5,
                                    multithread = FALSE, 
                                    quiet = FALSE,
-                                   plot=TRUE)
-     ))%>%
-     tidyr::unnest(data)
-   out <- paste0("output/rds/",unique(process$pcr_primers),"_",unique(basename(process$ref_db)  %>% stringr::str_remove("\\..*$")),"_taxtab.rds")
-   return(out)
-   }, format="file", iteration = "vector"),
+                                   return_ids = TRUE)
+     )) %>%
+     mutate(idtaxa_ids = purrr::map(idtaxa,~{
+       .x$ids
+     })) %>%
+     mutate(idtaxa = purrr::map(idtaxa,~{
+       .x$tax
+     })) 
+   }, iteration = "vector"),
+
+# Write out idtaxa objects
+tar_target(idtaxa_path, {
+  process <- tax_idtaxa %>%
+    mutate(output = purrr::pmap(list(pcr_primers, ref_db, idtaxa), ~{
+      # Write out RDS of the tax table
+      saveRDS(..3, paste0("output/rds/",..1,"_",basename(..2)  %>% stringr::str_remove("\\..*$"),"_taxtab.rds"))
+    }))
+  out <- paste0("output/rds/",unique(process$pcr_primers),"_",unique(basename(process$ref_db)  %>% stringr::str_remove("\\..*$")),"_taxtab.rds")
+  return(out)
+}, format="file", iteration = "vector"),
+
+# Write out idtaxa ids
+tar_target(idtaxa_summary, {
+  process <- tax_idtaxa %>%
+    ungroup()%>%
+    mutate(summary = purrr::map(idtaxa_ids, ~{
+      t(sapply(.x, function(x) {
+        taxa <- paste0(x$taxon,"_", x$confidence)
+        taxa[startsWith(taxa, "unclassified_")] <- NA
+        taxa
+      })) %>%
+        purrr::map(unlist) %>%
+        stri_list2matrix(byrow=TRUE, fill=NA) %>%
+        magrittr::set_colnames(c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")[1:ncol(.)]) %>%
+        as.data.frame() 
+    })) %>%
+    dplyr::select(pcr_primers,ref_db, summary)%>%
+    unnest(summary)
+  
+  out <- paste0("output/logs/idtaxa_results.csv")
+  write_csv(process, out)
+  return(out)
+}, format="file", iteration = "vector"),
 
 ## BLAST -------------------------------------------------------------------
  tar_target(tax_blast_path,
@@ -477,7 +513,7 @@ tar_target(write_seqtab_qualplots, {
                                         unique() %>%
                                         basename() %>% 
                                         stringr::str_remove("\\..*$")
-                                      taxtabs <- tax_idtaxa[stringr::str_detect(tax_idtaxa, ref_dbs)& stringr::str_detect(tax_idtaxa, ..2)] %>%
+                                      taxtabs <- idtaxa_path[stringr::str_detect(idtaxa_path, ref_dbs)& stringr::str_detect(idtaxa_path, ..2)] %>%
                                         purrr::map(readRDS)
                                       if(length(taxtabs) == 1){
                                         out <- taxtabs[[1]]
@@ -552,14 +588,11 @@ tar_target(write_seqtab_qualplots, {
                       taxtabs <- taxtabs[taxtabs %>%
                                            purrr::map_lgl(function(y){
                                              any(stringr::str_detect(y, unique(.x$pcr_primers)))
-                                           })]
-                      tax <- taxtabs %>%
+                                           })] %>%
                         purrr::map(readRDS) 
-                      tax <- tax[sapply(tax, nrow) >0 ] 
-                      # Problem seems to be happening here when same ASVs are in different seqtabs
-                      # Maybe accept the assignment with the lower taxonomy?
-                      
-                      tax_merged <- tax %>%
+                      taxtabs <- taxtabs[sapply(taxtabs, nrow) >0 ] 
+
+                      tax_merged <- taxtabs %>%
                         purrr::map(~{
                           .x %>%
                             as_tibble(rownames = "OTU")
@@ -764,12 +797,21 @@ tar_target(ps_filt_summary, {
 
 # Read tracking plot ------------------------------------------------------
 tar_target(read_tracking, {
+  
+  # Unfiltered phyloseq
   ps_obj <- readRDS(ps)
   phyloseq::tax_table(ps_obj) <- phyloseq::tax_table(ps_obj) %>%
     as("data.frame") %>%
     seqateurs::unclassified_to_na() %>%
     as.matrix()
-    
+
+  # filtered phyloseq
+  ps_filt_obj <- readRDS(ps_filtered)
+  phyloseq::tax_table(ps_filt_obj) <- phyloseq::tax_table(ps_filt_obj) %>%
+    as("data.frame") %>%
+    seqateurs::unclassified_to_na() %>%
+    as.matrix()
+      
   read_tracker <- temp_samdf1 %>%
     dplyr::select(sample_name, fcid, pcr_primers) %>%
     dplyr::left_join(primer_trim %>%
@@ -797,17 +839,22 @@ tar_target(read_tracking, {
                 pivot_longer(cols=any_of(colnames(phyloseq::tax_table(ps_obj))), 
                              names_to = "rank",
                              values_to="name") %>%
+                filter(!is.na(name))%>%
                 dplyr::group_by(sample_id, rank) %>%
                 summarise(Abundance = sum(Abundance)) %>%
                 pivot_wider(names_from="rank",
                             values_from="Abundance")%>%
                 rename_with(~stringr::str_to_lower(.), everything()) %>%
                 rename_with(~stringr::str_c("classified_", .), -sample_id), by="sample_id")  %>%
+    dplyr::left_join(psmelt(ps_filt_obj) %>% # Could replace this with seqateurs::lowest_classified?
+                       dplyr::filter(Abundance > 0) %>%
+                       dplyr::group_by(sample_id) %>%
+                       summarise(sample_taxon_filt = sum(Abundance)), by="sample_id")  %>%
     dplyr::select(any_of(c(
       "sample_name","sample_id", "pcr_primers", "fcid", "input_reads", "trimmed", "filtered",
       "denoised", "chimerafilt", "lengthfilt", "phmmfilt", "framefilt", 
       "classified_root", "classified_kingdom", "classified_phylum","classified_class",
-      "classified_order", "classified_family", "classified_genus", "classified_species"
+      "classified_order", "classified_family", "classified_genus", "classified_species", "sample_taxon_filt"
     )))
   
   write_csv(read_tracker, "output/logs/read_tracker.csv")
@@ -820,7 +867,7 @@ tar_target(read_tracking, {
       "input_reads", "trimmed", "filtered",
       "denoised", "chimerafilt", "lengthfilt", "phmmfilt", "framefilt", 
       "classified_root", "classified_kingdom", "classified_phylum","classified_class",
-      "classified_order", "classified_family", "classified_genus", "classified_species"
+      "classified_order", "classified_family", "classified_genus", "classified_species", "sample_taxon_filt"
     ))) %>%
     ggplot(aes(x = step, y = reads, fill=pcr_primers))+
     geom_col() +
