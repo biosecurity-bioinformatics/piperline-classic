@@ -1165,6 +1165,11 @@ step_idtaxa <- function(seqtab, output=NULL, qc_dir, database, threshold = 60, m
     tax <- tax %>%
       magrittr::set_rownames(getSequences(seqtab)) 
   }
+  # Check that output dimensions match input
+  if(!all(rownames(tax) %in% colnames(seqtab))){
+    stop("Number of ASVs classified does not match the number of input ASVs")
+  }
+  
   if(!is.null(output)){saveRDS(tax, output)}
   return(tax)
 }
@@ -1205,6 +1210,12 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
     out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
       dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
   }
+  
+  # Check that output dimensions match input
+  if(!all(rownames(out) %in% colnames(seqtab))){
+    stop("Number of ASVs classified does not match the number of input ASVs")
+  }
+  
   if(!is.null(output)){saveRDS(out, output)}
   return(out)
 }
@@ -1249,6 +1260,10 @@ coalesce_tax <- function (x, y, suffix = c(".x", ".y"), prefer="left", join = dp
 
 step_join_tax_blast <- function(tax, blast_spp, output=NULL, propagate_tax=FALSE,
                           ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")){
+  if(!all(rownames(tax) %in% rownames(blast_spp))){
+    stop("ASVs in tax and blast_spp do not match")
+  }
+  
   if(nrow(tax) > 0 & nrow(blast_spp) > 0){
     #Set BLAST ids where tax isnt at genus level to NA
     disagreements <- !blast_spp[,1] == tax[,7]
@@ -1264,7 +1279,11 @@ step_join_tax_blast <- function(tax, blast_spp, output=NULL, propagate_tax=FALSE
         seqateurs::na_to_unclassified() #Propagate high order ranks to unassigned ASVs
     }
   } else {
+    warning("Either tax or blast_spp is empty")
     tax_blast <- as.matrix(tax)
+  }
+  if(!all(rownames(tax) %in% rownames(tax_blast))){
+    stop("Number of ASVs output does not match the number of input ASVs")
   }
   # Write taxonomy table for that db to disk
   if(!is.null(output)){saveRDS(tax_blast, output)}
@@ -1347,6 +1366,14 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
     filter(!duplicated(sample_id)) %>%
     as.data.frame()%>%
     magrittr::set_rownames(.$sample_id)
+  
+  missing_seqtab_asvs <- length(colnames(seqtab)[!colnames(seqtab) %in% rownames(taxtab)])
+  missing_taxtab_asvs <-length(rownames(taxtab)[!rownames(taxtab) %in% colnames(seqtab)])
+  
+  if(missing_seqtab_asvs > 0 | missing_taxtab_asvs){
+    stop(paste0(missing_seqtab_asvs, " ASVs are in seqtab and not taxtab, and ",
+                missing_taxtab_asvs, " ASVs are in taxtab but not seqtab"))
+  }
   
   if(is.null(phy)){
     ps <- phyloseq(phyloseq::tax_table(taxtab),
