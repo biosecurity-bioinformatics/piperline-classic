@@ -434,8 +434,6 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
 
 
 # Plots -------------------------------------------------------------------
-
-
 plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, n = 10000){
   input_dir <- normalizePath(input_dir)
   # Seq dir might need ot be changed to trimmed or other sub folders
@@ -544,65 +542,9 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
   Qualplots <- (gg.Fqual + gg.Rqual) / (gg.Fee + gg.Ree)
   return(Qualplots)
 }
-#
-#
-#plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE){
-#  input_dir <- normalizePath(input_dir)
-#  # Seq dir might need ot be changed to trimmed or other sub folders
-#  fastqFs <- normalizePath(fs::dir_ls(path = input_dir, glob = paste0("*",sample_id, "_S*_R1_*")))
-#  fastqRs <- normalizePath(fs::dir_ls(path = input_dir, glob = paste0("*",sample_id, "_S*_R2_*")))
-#  
-#  if(length(fastqFs) == 0 ){
-#    message(paste0("Sample ", sample_id, " Has no reads"))
-#    return(NULL)
-#  }
-#  if(!file.size(fastqFs) > 28) {
-#    message(paste0("Sample ", sample_id, " Has no reads"))
-#    return(NULL)
-#  }
-#
-#  #Plot qualities
-#  gg.Fqual <- plot_quality(fastqFs, n = 5e+05) +
-#    ggtitle(paste0(sample_id, " Forward Reads")) +
-#    scale_x_continuous(breaks=seq(0,300,25))
-#
-#  gg.Fee <- plot_maxEE(fastqFs, n = 5e+05) + 
-#    ggtitle(paste0(sample_id, " Forward Reads")) +
-#    scale_x_continuous(breaks=seq(0,300,25)) +
-#    theme(legend.position = "bottom")
-#  
-#  gg.Rqual <- plot_quality(fastqRs, n = 5e+05) + 
-#    ggtitle(paste0(sample_id, " Reverse Reads")) +
-#    scale_x_continuous(breaks=seq(0,300,25)) +
-#    theme(legend.position = "bottom")
-#  
-#  gg.Ree <- plot_maxEE(fastqRs, n = 5e+05) +
-#    ggtitle(paste0(sample_id, " Reverse Reads")) +
-#    scale_x_continuous(breaks=seq(0,300,25)) +
-#    theme(legend.position = "bottom")
-#  
-#  if(!is.null(truncLen)){
-#    gg.Fqual <- gg.Fqual +
-#      geom_vline(aes(xintercept=truncLen[1]), colour="blue") +
-#      annotate("text", x = truncLen[1]-10, y =2, label = paste0("Suggested truncLen = ", truncLen[1]), colour="blue")
-#    gg.Fee <-gg.Fee +
-#      geom_vline(aes(xintercept=truncLen[1]), colour="blue")+
-#      annotate("text", x = truncLen[1]-10, y =-3, label = paste0("Suggested truncLen = ", truncLen[1]), colour="blue")
-#    gg.Rqual <- gg.Rqual +
-#      geom_vline(aes(xintercept=truncLen[2]), colour="blue")+
-#      annotate("text", x = truncLen[1]-10, y =2, label = paste0("Suggested truncLen = ", truncLen[2]), colour="blue")
-#    gg.Ree <- gg.Ree + 
-#      geom_vline(aes(xintercept=truncLen[2]), colour="blue")+
-#      annotate("text", x = truncLen[1]-10, y =-3, label = paste0("Suggested truncLen = ", truncLen[2]), colour="blue")
-#  }
-#  
-#  Qualplots <- (gg.Fqual + gg.Rqual) / (gg.Fee + gg.Ree)
-#  return(Qualplots)
-#}
 
 
 # Primer trimming ---------------------------------------------------------
-
 step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_primer_seq, rev_primer_seq, pcr_primers,
                              n = 1e6, qualityType = "Auto", check_paired = TRUE, compress =TRUE, quiet=FALSE){
   input_dir <- normalizePath(input_dir)
@@ -674,7 +616,8 @@ step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_prime
 }
 
 
-# Read filtering
+# Read filtering ----------------------------------------------------------
+
 step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20, max_length = Inf,
                               max_ee = 1, trunc_length = 150, trim_left = 0, trim_right = 0,
                               quiet=FALSE, ...){

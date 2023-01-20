@@ -112,7 +112,7 @@ tar_target(primer_trim_path,
                     step_check_files(primer_trim_path)
    }),
 
-## Filter reads ------------------------------------------------------------
+# Filter reads ------------------------------------------------------------
   tar_target(read_filter,
              {
              temp_samdf2 %>%
@@ -228,7 +228,7 @@ tar_target(write_postfilt_qualplots, {
   return(out)
 }, format="file", iteration = "vector"),
 
-## Infer sequence variants with DADA2 --------------------------------------
+# Infer sequence variants with DADA2 --------------------------------------
 
   # Group temporary samdf by fcid
   tar_group_by(temp_samdf3_grouped, temp_samdf3, fcid),
@@ -292,7 +292,7 @@ tar_target(subset_seqtab_path,
            }, format="file"),
 
 
-#  Filter ASV's per locus -------------------------------------------------
+#  Filter ASVs -------------------------------------------------
  tar_target(filtered_seqtab, {
           temp_samdf3 %>%
            dplyr::select(-one_of("asv_min_length", "asv_max_length", "phmm", "coding", "genetic_code"))%>%
@@ -435,29 +435,6 @@ tar_target(idtaxa_path, {
   return(out)
 }, format="file", iteration = "vector"),
 
-# Write out idtaxa ids
-tar_target(idtaxa_summary, {
-  process <- tax_idtaxa %>%
-    ungroup()%>%
-    mutate(summary = purrr::map(idtaxa_ids, ~{
-      t(sapply(.x, function(x) {
-        taxa <- paste0(x$taxon,"_", x$confidence)
-        taxa[startsWith(taxa, "unclassified_")] <- NA
-        taxa
-      })) %>%
-        purrr::map(unlist) %>%
-        stri_list2matrix(byrow=TRUE, fill=NA) %>%
-        magrittr::set_colnames(c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")[1:ncol(.)]) %>%
-        as.data.frame() 
-    })) %>%
-    dplyr::select(pcr_primers,ref_db, summary)%>%
-    unnest(summary)
-  
-  out <- paste0("output/logs/idtaxa_results.csv")
-  write_csv(process, out)
-  return(out)
-}, format="file", iteration = "vector"),
-
 ## BLAST -------------------------------------------------------------------
  tar_target(tax_blast_path,
             {
@@ -493,8 +470,7 @@ tar_target(idtaxa_summary, {
           return(out)
         }, format="file", iteration = "vector"),
  
-### Aggregate taxonomic assignment methods-----------------------------------------------
-# Need to edit this to detect the PCR_primers as well
+## Aggregate taxonomic assignment methods-----------------------------------------------
  tar_target(joint_tax,
             {
               process <- temp_samdf3 %>%
@@ -574,7 +550,7 @@ tar_target(idtaxa_summary, {
             return(out)
            }, format="file", iteration = "vector"),
 
-### Merge taxonomy tables  -----------------------------------------------------
+## Merge taxonomy tables  -----------------------------------------------------
  tar_target(merged_tax,
             {
               process <- temp_samdf3 %>%
@@ -626,7 +602,7 @@ tar_target(idtaxa_summary, {
           }, format="file", iteration = "vector"),
 
 
-### Assignment plot ---------------------------------------------------------
+## Assignment summary ---------------------------------------------------------
 
 tar_target(assignment_plot, {
   temp_samdf3 %>%
@@ -653,7 +629,8 @@ tar_target(assignment_plot, {
                                    db = ..3,
                                    identity=60,
                                    coverage=80) %>% 
-                                   dplyr::select(OTU = qseqid, acc, blastspp = Species, pident, length, evalue, qcovs) 
+                                   mutate(blastspp = paste0(Genus, " ", Species)) %>%
+                                   dplyr::select(OTU = qseqid, acc, blastspp, pident, length, evalue, qcovs) 
                                  } else {
                                    tibble::enframe(seqs, name=NULL, value="OTU") %>%
                                      dplyr::mutate(acc = NA_character_,
@@ -714,6 +691,54 @@ tar_target(write_assignment_plot, {
   return(out)
 }, format="file", iteration = "vector"),
 
+
+# Write out assignment results
+tar_target(tax_summary, {
+  idtaxa_summary <- tax_idtaxa %>%
+    ungroup()%>%
+    mutate(summary = purrr::map2(idtaxa_ids, idtaxa, ~{
+     t(sapply(.x, function(x) {
+        taxa <- paste0(x$taxon,"_", x$confidence)
+        taxa[startsWith(taxa, "unclassified_")] <- NA
+        taxa
+      })) %>%
+        purrr::map(unlist) %>%
+        stri_list2matrix(byrow=TRUE, fill=NA) %>%
+        magrittr::set_colnames(c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")[1:ncol(.)]) %>%
+        as.data.frame() %>%
+        mutate_all(function(y){
+          name <- y %>%
+            str_remove("_[0-9].*$")
+          conf <- y %>%
+            str_remove("^.*_") %>%
+            str_trunc(width=6, side="right", ellipsis = "")
+            paste0(name, "_", conf, "%") 
+        }) %>%
+        na_if("NA_NA%") %>%
+        mutate(OTU = rownames(.y))
+    })) %>%
+    dplyr::select(pcr_primers,ref_db, summary)%>%
+    unnest(summary) %>%
+    distinct()
+  
+  blast_summary <- assignment_plot %>%
+    dplyr::select(pcr_primers, target_gene, ref_db, blast_db, joint)%>% 
+    unnest(joint)  %>%
+    dplyr::select(pcr_primers, target_gene, ref_db, blast_db, OTU, acc, blast_top_hit = blastspp, 
+                  blast_identity = pident, blast_evalue = evalue, blast_qcov = qcovs)
+  
+  summary_table <- idtaxa_summary %>%
+    left_join(blast_summary) %>%
+    dplyr::select(any_of(c("OTU", "pcr_primers", "target_gene", "ref_db", "blast_db", 
+                  "Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species",
+                  "blast_top_hit", "blast_identity", "blast_qcov","blast_evalue"
+    )))
+  
+  out <- paste0("output/logs/taxonomic_assignment_summary.csv")
+  write_csv(summary_table, out)
+  return(out)
+}, format="file", iteration = "vector"),
+
 # Create phyloseq object --------------------------------------------------
   tar_target(ps,{
     process <- step_phyloseq(
@@ -738,7 +763,7 @@ tar_target(write_assignment_plot, {
   }, format="file", iteration = "vector"),
 
   
-## Filter phyloseq ---------------------------------------------------------
+# Filter phyloseq ---------------------------------------------------------
 # Taxonomic and minimum abundance filtering
 tar_target(ps_filtered,{
      # if multiple primers were used - split ps into different primers
@@ -795,7 +820,7 @@ tar_target(ps_filt_summary, {
   return(out)
 }, format="file", iteration = "vector"),
 
-# Read tracking plot ------------------------------------------------------
+# Read tracking ------------------------------------------------------
 tar_target(read_tracking, {
   
   # Unfiltered phyloseq
