@@ -283,28 +283,64 @@ If different primers were used for different samples, these can be set as differ
 
 If multiple primer reference databases are to be used for each sample, these can be set by splitting each a semicolon. The taxonomic assignment will be conducted sequentially through the databases from left to right, with the second reference database only being used for those ASVs that couldnt be assigned to species level using the first databases (**tab 3**) 
 
-The genetic code parameter is used to check coding markers for stop codons and frameshifts that commonly indicate pseudogenes. For COI amplicons from insects, the invertebrate mitochondrial code is "SGC4", while the standard genetic code is "SGC0". If you are targetting other groups of organisms, all alternative genetic codes can be found by running Biostrings::GENETIC_CODE_TABLE in R.
+**Parameter options**
+
+* **Amplicon parameters:**
+    + **pcr_primers** - Name of PCR primers - must match samdf file
+    + **target_gene** - Name of target gene
+
+* **Read filterign:**
+    + **read_min_length** - Minimum length of primer trimmed reads
+    + **read_max_length** - Maximum length of primer trimmed reads
+    + **read_max_ee** - Maximum expected errors of primer trimmed reads
+    + **read_trunc_length** - Length to cut all longer reads to
+    + **read_trim_left** - Remove this many bp from left side of primer trimmed reads
+    + **read_trim_right** - Remove this many bp from right side of primer trimmed reads
+
+* **ASV filtering**
+    + **asv_min_length** - Minimum length of amplicon
+    + **asv_max_length** - Maximum length of amplicon
+    + **genetic_code** - Genetic code for amplicon - see Biostrings::GENETIC_CODE_TABLE
+    + **coding** - Is the amplicon from a protein coding gene
+    + **phmm** - Path to profile hidden markov model (Optional)
+
+* **Taxonomic assignment:**
+    + **ref_db** - Path to trained IDTAXA model
+    + **blast_db** - Path to fasta file of reference database
+    + **idtaxa_confidence** - Minimum bootstrap confidence for IDTAxA
+    + **blast_min_identity** - Minimum nucleotide identity for BLAST
+    + **target_kingdom** - Subset to target kingdom
+    + **target_phylum** - Subset to target phylum
+    + **target_class** - Subset to target class
+    + **target_order** - Subset to target order
+    + **target_family** - Subset to target family
+    + **target_genus** - Subset to target genus
+    + **target_species** - Subset to target species
+
+* **Sample & Taxon filtering:**
+    + **min_sample_reads** - Minimum reads per sample after filtering
+    + **min_taxa_reads** - Minimum reads per ASV to retain
+    + **min_taxa_ra** - Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
 
 ## Single primer set
 
 ```{R}
 # Params to add in step_add_parameters
 params <- tibble(
-  # Run parameters
-  pcr_primers = "fwhF2-fwhR2n", 
+  # Amplicon parameters
+  pcr_primers = "fwhF2-fwhR2n",
   target_gene="COI",
 
-  
   # Read filtering
   read_min_length = 20,
   read_max_length = Inf,
   read_max_ee = 1,
   read_trunc_length = 150,
-  read_trim_left = 0,
+  read_trim_left = 0, 
   read_trim_right = 0,
   
   # ASV filtering
-  asv_min_length = 195,
+  asv_min_length = 195, 
   asv_max_length = 215,
   genetic_code = "SGC4",
   coding = TRUE,
@@ -319,14 +355,14 @@ params <- tibble(
   target_phylum = "Arthropoda",
   target_class = NA_character_,
   target_order = NA_character_,
-  target_family = NA_character_, 
-  target_genus = NA_character_, 
+  target_family = NA_character_,
+  target_genus = NA_character_,
   target_species= NA_character_,
   
   # Sample & Taxon filtering
   min_sample_reads = 1000,
-  min_taxa_reads= NA_integer_, # Minimum reads per ASV to retain
-  min_taxa_ra = 1e-4, # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
+  min_taxa_reads= NA_integer_,
+  min_taxa_ra = 1e-4, #1e-4 is 0.01%
 )
 
 write_csv(params, "sample_data/loci_params.csv")
@@ -337,7 +373,7 @@ write_csv(params, "sample_data/loci_params.csv")
 ```{R}
 # Params to add in step_add_parameters
 params <- tibble(
-  # Run parameters
+  # Amplicon parameters
   pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
   target_gene=c("COI", "EIF3L"),
 
@@ -382,7 +418,7 @@ write_csv(params, "sample_data/loci_params.csv")
 
 ```{r}
 params <- tibble(
-  # Run parameters
+  # Amplicon parameters
   pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
   target_gene=c("COI", "EIF3L"),
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
@@ -445,43 +481,48 @@ tar_make()
 
 # Results
 
-After the run, two directories should have been made within the output folder, one for the unfiltered results, and another for the results after taxonomic subsetting, sample minimum abundance, and ASV minimum abundance filtering. 
+After the run, two directories should have been made within the output folder, output/results/unfiltered which contains the results before any taxonomic subsetting, sample minimum abundance, and ASV minimum abundance filtering, and output/results/filtered containing the results after these steps. Within each of these folders there should be a series of outputs:
 
-## Main results
-Within each of these folders there should be a series of outputs:
+* **samdf.csv** - This lists the abundance of each ASV and the sample it was detected in
 
-samdf.csv - This lists the abundance of each ASV and the sample it was detected in
-taxtab.csv - This lists the heirarchial taxonomy assigned to each ASV
-samdf.csv - This is the sample tracking sheet that lists the sequencing details for each sample
-ps.rds - This phyloseq object contains the information from the above 3 files, and can be analysed further using the phyloseq R package, a useful tool for plotting and statistical analysis of metabarcoding datasets: https://joey711.github.io/phyloseq/
-asvs.fasta - This contains the amplicon sequence variants infered from the dataset
-spp_sum.csv - This is a Species level summary listing the abundance of each Species and the sample it was detected in
-raw.csv - This is a large file containing all the above results in a single csv
+* **taxtab.csv** - This lists the heirarchial taxonomy assigned to each ASV
+
+* **samdf.csv** - This is the sample tracking sheet that lists the sequencing details for each sample
+
+* **ps.rds** - This phyloseq object contains the information from the above 3 files, and can be analysed further using the [phyloseq R package](https://joey711.github.io/phyloseq/), a useful tool for plotting and further analysis of metabarcoding and microbiome datasets
+
+* **asvs.fasta** - This contains the amplification sequence variants inferred from the data set
+
+* **spp_sum.csv** - This is a Species level summary listing the abundance of each Species and the sample it was detected in
+
+* **raw.csv** - This is a large file containing all the above results in a single csv
 
 ## Quality control
 
 The pipeline also outputs some quality control plots that should be checked to ensure the pipeline has run correctly and the outputs are as desired
 
-### Sequencing QC
-QScore
-avg_intensity
-PF_clusters
-Index switching
+* **Per-flowcell quality checks**
+    + **output/logs/FCID/FCID_flowcell_qc.pdf** - 
+    
+    + **output/logs/FCID/FCID_index_switching.pdf** - This is a heatmap of the amount of index switching per index set and flowcell used. On the diagonal of the plot is the indexes applied to the samples, while the other squares on the grid display instances where either the i5 or i7 index has switched causing this read to end up in the undetermined reads file. The text above the plot lists the total reads demultiplex from that flowcell, the switch rate (only one of the indexes switching causing the read to end up in the undetermined reads file) as a percentage, the cross-contamination rate (both indexes switching the read ending up in another sample) as a percentage, and the number of "other reads" which were those where no applied indexes were detected. The cross-contamination rate is calculated as the square of the index switching rate as per (costello et al), and should be a rough guide to determine an appropriate ASV minimum abundance threshold for filtering. NOTE: This plot is only created when unique dual indexes were used on the sample.
 
-### Sample QC
-prefilt_qualplots
-postfilt_qualplots
+    + **output/logs/FCID/FCID_prefilt_qualplots.pdf** - This multiplot summarises the read quality scores for the forward and reverse reads, pre filtering. These plots can serve as an indicator for adjusting read filtering parameters of the pipeline. The top two plots summarise the mean quality score by position for the forward and reverse reads respectively. For illumina data, these will start to decrease towards the end of the reads, particularly for the reverse reads. The two bottom plots show the cumulative expected errors along the reads, with different coloured dots for different quantiles of the read data (i.e. lower 10% to upper 90%). The red lines show the potential max expecter error cutoffs, with all reads above the set maximum expected error filter beign removed (param read_max_ee). For example, if the lower 10% quantile of reads goes above the red line for maxEE=1, you would expect 10% of the reads to be removed if read_max_ee was set to 1. As more errors commonly occur in the ends of the read, if there is sufficient overlap between the reads to cover the length of the amplicon, the reads could instead be truncated to smaller lengths to reduce the amount of reads that cross this minimum expected error filter which would retain more data. Note that when truncating reads you should aim to have at least 20bp of overlap to facilitate forward and reverse read merging. 
+    
+    + **output/logs/FCID/FCID_prefilt_qualplots.pdf** - This multiplot summarises the read quality scores for the forward and reverse reads, pre filtering. These plots list the same information as the pre-filtering quality plots, and should be checked to ensure that the filtering has been correctly applied. i.e., if reads were truncated or trimmed on the left or right (params read_trunc_length, read_trim_left, read_trim_right) they should be shorter then the pre-filter plots, and if a maximum expected error filter (param read_max_ee) was applied, none of the EE quantiles should be above the corresponding red line
 
-### DADA2 QC
-Error_model
+    + **output/logs/FCID/FCID_errormodel.pdf** - This plot summarises the error model used for dada2 that was inferred from the data for the respective flow cell. The error rates for each possible transition (A→C, A→G, etc) are shown in each subplot. The dot-points are the error rates observed in the data for each quality score. The black line shows the estimated error rates from the machine-learning algorithm. The red line shows the error rates that would be expected if the Q-scores assigned by the sequencer were completely accurate. This plot can be more subjective to interpret, but generally you want to see the estimated error rates (black line) decrease as the quality score (x axis) increases, in a relatively linear fashion. Minor humps in the black line are no problem, but a very jagged line may indicate that the error model did not fit correctly. Note: for NextSeq and NovaSeq data, the binned quality scores provided by the sequencer can cause large humps or dips in the error model fit. This is generally not a big problem, see [this github issue](https://github.com/benjjneb/dada2/issues/1307) for a deeper discussion on fitting error models for binned quality scores.
 
-### Taxonomic assignment
-locus_taxonomic_assignment.pdf 
-locus_taxonomic_assignment.csv - lis
+* **Whole dataset quality checks:**
+    + **output/logs/ASV_cleanup_summary.pdf** - This plot lists the abundance, and number of unique sequence variance inferred from dada2, their lengths, and whether they were retained or filtered out during the ASV filtering step. Generally you should see a lot of unique sequences filtered out in this step, but the majority of the abundance should remain. 
 
-### Seqtab
+    + **output/logs/ASV_cleanup_summary.csv** - This table lists the individual sequence variants, their abudnance, length and whether they were retained or filtered out during the ASV filtering step. This table is useful for deeper investigation to ensure that real sequences were not removed in any of the ASV filtering steps.
 
-### Pipeline summary
-read_tracker.csv
+    + **output/logs/taxonomic_assignment_summary.pdf** - This plot summarises the genetic distance of the ASVs to the reference database (from BLAST top hit identity), and what taxonomy was assigned to each. This plot gives a good overview of how well the analysed sequences are represented in the reference database, and how successful the taxonomic assignment was.  
+
+    + **output/logs/taxonomic_assignment_summary.csv** - This table lists the individual sequence variants and their assigned taxonomy and confidence scores with IDTAXA. The columns to the right also indicate the BLAST top hit and their distance to the closest blast hit. This table is useful for deeper investigation of how different sequences were assigned.
+
+    + **output/logs/read_tracker.pdf** This plot summarises the number of reads retained through all steps of the pipeline, as well as how many reads were classified to different taxonomic ranks. This plot provides a useful overview of all pipeline steps to determine if too many reads are being lost at a certain step
+
+    + **output/logs/read_tracker.csv** Similar to the above plot, this table summarises the number of reads retained through all steps of the pipeline, as well as how many reads were classified to different taxonomic ranks.
 
 

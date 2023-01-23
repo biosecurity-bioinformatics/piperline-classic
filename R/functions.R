@@ -153,7 +153,7 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
                   reads_total = NA_integer_)
     return(out)
   }
-  if(!dir.exists(paste0(seq_dir,"/RunInfo.xml"))){
+  if(!file.exists(paste0(seq_dir,"/RunInfo.xml"))){
     warning("RunInfo.xml must be present to run quality checks")
     out <- tibble(fcid = fcid,
                   reads_pf = NA_integer_,
@@ -187,19 +187,14 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
     facet_wrap(~side, scales="free") +
     scale_fill_viridis_c()
   
-  pdf(file=normalizePath(paste0(qc_dir, "/", fcid, "_imaging_intensity.pdf")), width = 11, height = 8 , paper="a4r")
+  pdf(file=normalizePath(paste0(qc_dir, "/", fcid, "_flowcell_qc.pdf")), width = 11, height = 8 , paper="a4r")
     plot(gg.avg_intensity)
-  try(dev.off(), silent=TRUE)
-  
-  pdf(file=normalizePath(paste0(qc_dir,  "/", fcid, "_clusters_passing_filter.pdf")), width = 11, height = 8 , paper="a4r")
     savR::pfBoxplot(fc)
-  try(dev.off(), silent=TRUE)
-  
-  for (lane in 1:fc@layout@lanecount) {
-    pdf(file=normalizePath(paste0(qc_dir,  "/", fcid, "_QScore_lane", lane, ".pdf")), width = 11, height = 8 , paper="a4r")
+    for (lane in 1:fc@layout@lanecount) {
     savR::qualityHeatmap(fc, lane, 1:fc@directions)
-    try(dev.off(), silent=TRUE)
-  } 
+    }
+  try(dev.off(), silent=TRUE)
+
   if(!quiet){message("Flow cell quality metrics written to: ", qc_dir)}
   
   # Return the total number of reads and passing filter
@@ -355,7 +350,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   # Check if indices are combinatorial
   if(any(duplicated(applied_indices$index)) | any(duplicated(applied_indices$index2))){
     warning(paste0("Combinatorial indexes detected for", fcid, " no switch rate calculated"))
-    res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_)
+    res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_, contam_rate=NA_integer_)
     return(res)
   }
   
@@ -375,9 +370,11 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
       dplyr::summarise(switch_rate = sum(Freq), .groups = "drop") %>%
       tidyr::pivot_wider(names_from = type,
                          values_from = switch_rate) %>%
-      dplyr::mutate(switch_rate =  observed / expected )
+      dplyr::mutate(switch_rate =  observed / expected ) %>%
+      dplyr::mutate(contam_rate =  switch_rate^2 )
   } else {
-    res <- tibble(expected = sum(switched$Freq), observed=0, switch_rate=0)
+    res <- tibble(expected = NA_integer_, observed=NA_integer_, switch_rate=NA_integer_, contam_rate=NA_integer_)
+    return(res)
   }
   
   if(!quiet){message("Index switching rate calculated as: ", res$switch_rate)}
@@ -419,13 +416,13 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
     scale_fill_viridis_c(name="log10 Reads", begin=0.1, trans="log10")+
     theme(axis.text.x = element_text(angle=90, hjust=1), 
           plot.title=element_text(hjust = 0.5),
-          plot.subtitle =element_text(hjust = 0.5)#,
-          #legend.position = "none"
+          plot.subtitle =element_text(hjust = 0.5)
     ) +
     labs(title= fcid, subtitle = paste0(
       "Total Reads: ", sum(indices$Freq),
       ", Switch rate: ", sprintf("%1.4f%%", res$switch_rate*100),
-      ", other Reads: ", other_reads)) 
+      ", Contam rate: ", sprintf("%1.6f%%", res$contam_rate*100),
+      ", Other reads: ", other_reads)) 
   pdf(file=normalizePath(paste0(qc_dir, fcid,"_index_switching.pdf")), width = 11, height = 8 , paper="a4r")
     plot(gg.switch)
     try(dev.off(), silent=TRUE)
@@ -482,7 +479,7 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
   gg.Fee <- Fquals %>% 
     dplyr::select(Cycle, starts_with("EE")) %>% 
     tidyr::pivot_longer(cols = starts_with("EE")) %>% 
-    dplyr::group_by(name) %>% 
+    dplyr::group_by(name) %>%  # Remove EE and replace with percentage at end? - i.e lower 10%
     dplyr::mutate(cumsumEE = cumsum(value)) %>%
     ggplot(aes(x = Cycle, y = log10(cumsumEE), colour = name)) + 
     geom_point(size = 1) + 
@@ -496,7 +493,8 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
     geom_text(label = "MaxEE=3", aes(x = 0, y = log10(3), hjust = 0, vjust = 0), color = "red") + 
     geom_text(label = "MaxEE=5", aes(x = 0, y = log10(5), hjust = 0, vjust = 0), color = "red") + 
     geom_text(label = "MaxEE=7", aes(x = 0, y = log10(7), hjust = 0, vjust = 0), color = "red") + 
-    labs(x = "Reads position", y = "Log10 Cumulative expected errors") + 
+    labs(x = "Reads position", y = "Log10 Cumulative expected errors",
+         colour = "Read quantiles") + 
     ggtitle(paste0(sample_id, " Forward Reads")) +
     scale_x_continuous(breaks=seq(0,300,25)) +
     theme(legend.position = "bottom")
@@ -636,6 +634,14 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
 
   if(length(fastqFs) != length(fastqRs)) stop(paste0("Forward and reverse files for ",sample_id," do not match."))
 
+  # Handle NA inputs
+  if(is.na(min_length)){min_length <- 20}
+  if(is.na(max_length)){max_length <- Inf}
+  if(is.na(max_ee)){max_ee <- Inf}
+  if(is.na(trunc_length)){trunc_length <- 0}
+  if(is.na(trim_left)){trim_left <- 0}
+  if(is.na(trim_right)){trim_right <- 0}
+  
   # Run read filter
   res <- dada2::filterAndTrim(
     fwd = fastqFs, filt = file.path(output_dir, basename(fastqFs)),

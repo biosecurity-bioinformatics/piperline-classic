@@ -59,19 +59,35 @@ list(
   tar_group_by(temp_samdf1_grouped, temp_samdf1, fcid),
 
 # Sequencing QC -------------------------------------------------------
-  tar_target(seq_qc,
-             temp_samdf1_grouped %>%
+  tar_target(seq_qc, {
+             process <- temp_samdf1_grouped %>%
                 dplyr::group_by(fcid) %>%
                 tidyr::nest() %>%
-                dplyr::mutate(seq_qc = purrr::map(fcid, step_seq_qc, quiet=FALSE, write_all=FALSE)),
-             pattern = map(temp_samdf1_grouped), iteration = "vector"),
+                dplyr::mutate(seq_qc = purrr::map(fcid, step_seq_qc, quiet=FALSE, write_all=FALSE))
+             out <- paste0("output/logs/", unique(process$fcid),"/",unique(process$fcid),"_flowcell_qc.pdf")
+             if(is.na(process$seq_qc[[1]]$reads_pf)){
+               pdf(file=out, paper="A4")
+               plot.new()
+               text(x=.5, y=.5, "ERROR: InterOp folder or RunInfo.xml not present") 
+               try(dev.off(), silent=TRUE)
+             }
+             return(out)
+             }, pattern = map(temp_samdf1_grouped), format="file",  iteration = "vector"),
   
-  tar_target(switching_qc,
-             temp_samdf1_grouped %>%
+  tar_target(switching_qc,{
+             process <- temp_samdf1_grouped %>%
                dplyr::group_by(fcid) %>%
                tidyr::nest() %>%
-               dplyr::mutate(switching_qc = purrr::map(fcid, step_switching_calc, multithread=FALSE, quiet=TRUE)),
-             pattern = map(temp_samdf1_grouped), iteration = "vector"),
+               dplyr::mutate(switching_qc = purrr::map(fcid, step_switching_calc, multithread=FALSE, quiet=TRUE))
+             out <- paste0("output/logs/",unique(process$fcid),"/",unique(process$fcid),"_index_switching.pdf")
+             if(is.na(process$switching_qc[[1]]$switch_rate)){
+               pdf(file=out, paper="A4")
+               plot.new()
+               text(x=.5, y=.5, "ERROR: Undetermined reads file not found") 
+              try(dev.off(), silent=TRUE)
+             }
+             return(out)
+             },pattern = map(temp_samdf1_grouped), format="file", iteration = "vector"),
              
 
 # Demultiplex and trim primers --------------------------------------------
@@ -375,19 +391,36 @@ tar_target(write_seqtab_qualplots, {
    }, format="file", iteration = "vector"),
 
 # Assign taxonomy ---------------------------------------------------------
-  tar_file(ref_db_tracked,
-           params  %>%
+
+
+
+  tar_file(ref_db_tracked,{
+           out <- params  %>%
              dplyr::pull(ref_db) %>%
              unique()%>%
              stringr::str_split(pattern=";", n=Inf) %>% 
              unlist()
+           #If its empty - write a dummy file
+           if(is.na(process)){
+             out <- tempfile(pattern="dummy")
+             writeLines("TEST", out)
+           }
+           return(out)
+  }
   ),
-  tar_file(blast_db_tracked,
-           params  %>%
+  tar_file(blast_db_tracked,{
+           out <- params  %>%
              dplyr::pull(blast_db) %>%
              unique() %>%
              stringr::str_split(pattern=";", n=Inf) %>% 
              unlist()
+           # If its empty - write a dummy file
+           if(is.na(process)){
+             out <- tempfile(pattern="dummy")
+             writeLines("TEST", out)
+           }
+           return(out)
+  }
   ),
 
 ## IDTAXA -------------------------------------------------------------------
