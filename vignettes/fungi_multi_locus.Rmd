@@ -210,7 +210,7 @@ The genetic code parameter is used to check coding markers for stop codons and f
 ## Different or multiple primer sets per sample
 
 ```{R}
-# Params to add in step_add_parameters
+# Params to add in step_'add_parameters
 params <- tibble(
   # Run parameters
   pcr_primers = c("ITS1Fngs-ITS2ngs", "ITS7ngsOphio-ITS4ngsUni", "LF402F-LR5Fungngs", "CALngsF1-CALngsR1", "EF1087Fngs-EF646Rngs"),
@@ -218,7 +218,7 @@ params <- tibble(
 
   # Read filtering
   read_min_length = 50,
-  read_max_length = 225,
+  read_max_length = Inf,
   read_max_ee = 1,
   read_trunc_length = 225,
   read_trim_left = 0,
@@ -232,11 +232,12 @@ params <- tibble(
   phmm = NA_character_,
   
   # Taxonomic assignment
-  ref_db = c("reference/rRNA_Jul2022.rds","reference/rRNA_Jul2022.rds", "reference/rRNA_Jul2022.rds",
+  idtaxa_db = c("reference/rRNA_Jul2022.rds","reference/rRNA_Jul2022.rds", "reference/rRNA_Jul2022.rds",
              "reference/CAL_Aug2021.rds", "reference/TEF_Jul2022.rds"
              ),
-  blast_db = NA_character_,
+  ref_fasta = "reference/insecta_hierarchial_bftrimmed.fa",
   idtaxa_confidence = 60,
+  blast_top_hit=TRUE,
   blast_min_identity = 97,
   target_kingdom = NA_character_,
   target_phylum = NA_character_,

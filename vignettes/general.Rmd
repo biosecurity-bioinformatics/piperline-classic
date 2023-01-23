@@ -305,8 +305,8 @@ If multiple primer reference databases are to be used for each sample, these can
     + **phmm** - Path to profile hidden markov model (Optional)
 
 * **Taxonomic assignment:**
-    + **ref_db** - Path to trained IDTAXA model
-    + **blast_db** - Path to fasta file of reference database
+    + **idtaxa_db** - Path to trained IDTAXA model
+    + **ref_fasta** - Path to fasta file of reference database
     + **idtaxa_confidence** - Minimum bootstrap confidence for IDTAxA
     + **blast_min_identity** - Minimum nucleotide identity for BLAST
     + **target_kingdom** - Subset to target kingdom
@@ -347,9 +347,10 @@ params <- tibble(
   phmm = "reference/folmer_fullength_model.rds",
   
   # Taxonomic assignment
-  ref_db = "reference/idtaxa_bftrimmed.rds",
-  blast_db = "reference/insecta_hierarchial_bftrimmed.fa.gz",
+  idtaxa_db = "reference/idtaxa_bftrimmed.rds",
+  ref_fasta = "reference/insecta_hierarchial_bftrimmed.fa.gz",
   idtaxa_confidence = 60,
+  run_blast=TRUE,
   blast_min_identity = 97,
   target_kingdom = "Metazoa",
   target_phylum = "Arthropoda",
@@ -393,9 +394,10 @@ params <- tibble(
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
   
   # Taxonomic assignment
-  ref_db = c("reference/COI_idtaxa.rds","reference/EIF3L_idtaxa.rds"),
-  blast_db = c("reference/COI_hierarchial.fa.gz", "reference/EIF3L_hierarchial.fa.gz"),
+  idtaxa_db = c("reference/COI_idtaxa.rds","reference/EIF3L_idtaxa.rds"),
+  ref_fasta = c("reference/COI_hierarchial.fa.gz", "reference/EIF3L_hierarchial.fa.gz"),
   idtaxa_confidence = 60,
+  run_blast=TRUE,
   blast_min_identity = 97,
   target_kingdom = c("Metazoa", "Metazoa"),
   target_phylum = c("Arthropoda","Arthropoda"),
@@ -439,11 +441,12 @@ params <- tibble(
   coding = c(TRUE, TRUE),
   
   # Taxonomic assignment
-  ref_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds",
+  idtaxa_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds",
              "reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
-  blast_db = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz",
+  ref_fasta = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz",
                "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
   idtaxa_confidence = 60,
+  run_blast=TRUE,
   blast_min_identity = 97,
   target_kingdom = c("Metazoa", "Metazoa"),
   target_phylum = c("Arthropoda","Arthropoda"),
