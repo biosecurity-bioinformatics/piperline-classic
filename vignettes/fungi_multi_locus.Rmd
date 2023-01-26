@@ -235,9 +235,9 @@ params <- tibble(
   idtaxa_db = c("reference/rRNA_Jul2022.rds","reference/rRNA_Jul2022.rds", "reference/rRNA_Jul2022.rds",
              "reference/CAL_Aug2021.rds", "reference/TEF_Jul2022.rds"
              ),
-  ref_fasta = "reference/insecta_hierarchial_bftrimmed.fa",
+  ref_fasta = "reference/insecta_hierarchial_bftrimmed.fa.gz",
   idtaxa_confidence = 60,
-  blast_top_hit=TRUE,
+  run_blast=FALSE,
   blast_min_identity = 97,
   target_kingdom = NA_character_,
   target_phylum = NA_character_,

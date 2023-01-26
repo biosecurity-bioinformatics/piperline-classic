@@ -914,6 +914,13 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
 step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_length = NULL, 
                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
 
+  # Handle NA inputs
+  if(is.na(min_length)){min_length <- NULL}
+  if(is.na(max_length)){max_length <- NULL}
+  if(is.na(phmm)){phmm <- NULL}
+  if(any(is.na(primers))){primers <- NULL}
+  
+  
   if(is.matrix(seqtab) | is.data.frame(seqtab)){
     if(!quiet){message("Input is a matrix or data frame")}
   } else if (is.character(seqtab) & stringr::str_detect(seqtab, ".rds")){
@@ -951,22 +958,24 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   
   # Load in profile hidden markov model if provided
   if(is.character(phmm) && stringr::str_detect(phmm, ".rds")){
-    model <- readRDS(phmm)
+    phmm_model <- readRDS(phmm)
   } else if (is(phmm, "PHMM")){
-    model <- phmm
+    phmm_model <- phmm
+  } else {
+    phmm_model <- NULL
   }
   
   # subset PHMM if primers were provided
-  if (is(model, "PHMM") && !is.null(primers)){
-    model <- taxreturn::subset_model(model, primers = primers)
+  if (is(phmm_model, "PHMM") && !is.null(primers)){
+    phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
   }
   
   # Align against phmm
-  if (is(model, "PHMM") & any(reads_lengthfilt > 0)){
+  if (is(phmm_model, "PHMM") & any(reads_lengthfilt > 0)){
     seqs <- DNAStringSet(colnames(seqtab_cut))
     names(seqs) <- colnames(seqtab_cut)
     phmm_filt <- taxreturn::map_to_model(
-      seqs, model = model, min_score = 100, min_length = 100,
+      seqs, model = phmm_model, min_score = 100, min_length = 100,
       shave = FALSE, check_frame = check_frame, kmer_threshold = 0.5, k=5, extra = "fill")
     seqtab_phmm <- seqtab_cut[,colnames(seqtab_cut) %in% names(phmm_filt)]
     if(!quiet){
