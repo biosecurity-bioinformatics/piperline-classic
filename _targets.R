@@ -491,7 +491,7 @@ tar_target(idtaxa_path, {
              dplyr::mutate(blast = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, ref_fasta2, blast_min_identity, run_blast),
                                         .f = ~{
                                         if(isTRUE(..6)){
-                                        step_blast_tophit(
+                                        blast_res <- step_blast_tophit(
                                           seqtab = ..3,
                                           database = ..4,
                                           ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") ,
@@ -504,9 +504,12 @@ tar_target(idtaxa_path, {
                                           max_hsp=5, 
                                           multithread = FALSE, 
                                           quiet = FALSE)
+                                        return(blast_res)
                                         } else {
-                                          tibble::enframe(getSequences(..3), name=NULL, value="OTU") %>%
+                                          blast_res <- tibble::enframe(getSequences(..3), name=NULL, value="OTU") %>%
                                             dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
+                                          saveRDS(blast_res, paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_blast.rds"))
+                                          return(blast_res)
                                         }
                                         }
            ))
