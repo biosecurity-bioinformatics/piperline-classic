@@ -182,28 +182,28 @@ tar_target(read_filter_path,
 
 ## Pre-filtering quality plots ---------------------------------------------
 
-# Sample a random set of samples for read quality plotting - Sample the different pcr_primers too!
-tar_target(read_samples,{
-  group_sizes <- temp_samdf3 %>%
+# Sample a random set of 5 samples for read quality plotting
+tar_target(prefilt_read_samples,{
+  group_sizes <- temp_samdf2 %>%
     dplyr::group_by(fcid, pcr_primers) %>%
     dplyr::group_size()
-  if(all(group_sizes > 10)){
-    n_samples <- 10
+  if(all(group_sizes > 5)){
+    n_samples <- 5
   } else {
     n_samples = min(group_sizes)
   }
-  out <- temp_samdf3 %>%
+  out <- temp_samdf2 %>%
     dplyr::group_by(fcid, pcr_primers) %>%
     dplyr::slice_sample(n=n_samples) 
 }),
 
 tar_target(prefilt_qualplots,
-          read_samples %>%
+           prefilt_read_samples %>%
            dplyr::mutate(prefilt_qualplots = purrr::pmap(list(sample_id, fcid),
                  .f = ~plot_read_quals(sample_id = ..1,
                  input_dir = paste0("data/",..2,"/01_trimmed/"), truncLen=NULL, quiet = FALSE, n = 10000)
             )),
-            pattern = map(read_samples), iteration = "vector"),
+            pattern = map(prefilt_read_samples), iteration = "vector"),
 
 ## Write out prefilt qualplots
 tar_target(write_prefilt_qualplots, {
@@ -221,13 +221,20 @@ tar_target(write_prefilt_qualplots, {
   }, format="file", iteration = "vector"),
 
 ## Post-filtering quality plots --------------------------------------------
+# Get the same samples as the prefilt quality plots
+tar_target(postfilt_read_samples,{
+  out <- temp_samdf3 %>%
+    dplyr::group_by(fcid, pcr_primers) %>%
+    filter(sample_id %in% prefilt_read_samples$sample_id)
+}),
+
 tar_target(postfilt_qualplots,
-           read_samples %>%
+           postfilt_read_samples %>%
             dplyr::mutate(postfilt_qualplots = purrr::pmap(list(sample_id, fcid),
                  .f = ~plot_read_quals(sample_id = ..1,
                  input_dir = paste0("data/",..2,"/02_filtered/"), truncLen=NULL, quiet = FALSE, n = 10000)
            )),
-            pattern = map(read_samples), iteration = "vector"),
+            pattern = map(postfilt_read_samples), iteration = "vector"),
  
 # Write out postfilt qualplots
 tar_target(write_postfilt_qualplots, {
@@ -608,22 +615,23 @@ tar_target(idtaxa_path, {
                       tax_merged <- taxtabs %>%
                         purrr::map(~{
                           .x %>%
-                            as_tibble(rownames = "OTU")
+                            tibble::as_tibble(rownames = "OTU")
                         }) %>%
                         dplyr::bind_rows() %>%
-                        distinct() # Remove any exact duplicates from save ASV being in different seqtab
+                        dplyr::distinct() # Remove any exact duplicates from save ASV being in different seqtab
                       
+                      print(tax_merged)
                       # Check for duplicated ASVs across taxtabs
                       if(any(duplicated(tax_merged$OTU))){
                         warning("Duplicated ASVs detected, selecting first occurance")
                         out <- tax_merged %>%
-                          group_by(OTU) %>%
-                          slice(1)%>%
-                          column_to_rownames("OTU") %>%
+                          dplyr::group_by(OTU) %>%
+                          dplyr::slice(1)%>%
+                          tibble::column_to_rownames("OTU") %>%
                           as.matrix()
                       } else{
                         out <- tax_merged %>%
-                          column_to_rownames("OTU")%>%
+                          tibble::column_to_rownames("OTU")%>%
                           as.matrix()
                       }
                       # Check that output dimensions match input
@@ -799,7 +807,20 @@ tar_target(tax_summary, {
     return(out)
   }, format="file", iteration = "vector"),
 
-  
+
+
+# Accumulation curve ------------------------------------------------------
+tar_target(accumulation_curve, {
+  ps_obj <- ps %>%
+    readRDS()
+  gg.acc_curve <- rareplot(ps_obj, step="auto", threshold = max(params$min_sample_reads))
+  out <- "output/logs/accumulation_curve.pdf"
+  pdf(file=out, width = 11, height = 8 , paper="a4r")
+    print(gg.acc_curve)
+  try(dev.off(), silent=TRUE)
+  return(out)
+}, format="file", iteration = "vector"),
+
 # Filter phyloseq ---------------------------------------------------------
 # Taxonomic and minimum abundance filtering
 tar_target(ps_filtered,{
@@ -950,7 +971,7 @@ tar_target(read_tracking, {
     labs(x = "Pipeline step",
          y = "Reads retained",
          fill = "PCR primers")
-  pdf(file=paste0("output/logs/read_tracker.pdf"), width = 11, height = 8 , paper="a4r")
+  pdf(file="output/logs/read_tracker.pdf", width = 11, height = 8 , paper="a4r")
     print(gg.read_tracker)
   try(dev.off(), silent=TRUE)
   

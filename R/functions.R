@@ -854,6 +854,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   qc_dir <- normalizePath(qc_dir)
   filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
   filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
   
   # Learn error rates from a subset of the samples and reads (rather than running self-consist with full dataset)
   errF <- learnErrors(filtFs, multithread = multithread, nbases = nbases,
@@ -883,7 +884,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   
   # merge reads
   mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE) 
-  mergers <- mergers[sapply(mergers, nrow) > 0]
+  #mergers <- mergers[sapply(mergers, nrow) > 0] # This was edited to retain empty samples!
   if(write_all){
     dplyr::bind_rows(mergers, .id="Sample") %>%
       dplyr::mutate(Sample = stringr::str_remoce(Sample, pattern="_S[0-9]+_R[1-2]_.*$")) %>%
@@ -891,6 +892,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   }
   
   #Construct sequence table
+  sample_names <- basename(filtFs) %>% stringr::str_remove("_S[0-9]+_R[1-2]_.*$")
   seqtab <- makeSequenceTable(mergers)
   saveRDS(seqtab, output)
   
@@ -901,7 +903,6 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
     as.data.frame() %>%
     rownames_to_column("sample_id") %>%
     dplyr::mutate(sample_id = stringr::str_remove(basename(sample_id), pattern="_S[0-9]+_R[1-2]_.*$")) %>%
-    #"_S[0-9]+_R[1-2]_.*$"
     as_tibble()
   return(res)
 }
@@ -1023,6 +1024,18 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   gg.abundance <- ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
     geom_bar(stat="identity") + 
     scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
+    theme_bw()+
+    theme(
+      strip.background = element_rect(colour = "black", fill = "lightgray"),
+      strip.text = element_text(size=9, family = ""),
+      axis.text.x =element_text(angle=45, hjust=1, vjust=1),
+      plot.background = element_blank(),
+      text = element_text(size=9, family = ""),
+      axis.text = element_text(size=8, family = ""),
+      legend.position = "right",
+      panel.border = element_rect(colour = "black", fill=NA, size=0.5),
+      panel.grid = element_line(size = rel(0.5)),
+    ) +
     labs(title = "Abundance of sequences",
          x = "ASV length",
          y = "log10 ASV abundance",
@@ -1031,6 +1044,18 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   gg.unique <- ggplot(cleanup, aes(x=length, fill=type))+
     geom_histogram(binwidth = 1) + 
     scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
+    theme_bw()+
+    theme(
+      strip.background = element_rect(colour = "black", fill = "lightgray"),
+      strip.text = element_text(size=9, family = ""),
+      axis.text.x =element_text(angle=45, hjust=1, vjust=1),
+      plot.background = element_blank(),
+      text = element_text(size=9, family = ""),
+      axis.text = element_text(size=8, family = ""),
+      legend.position = "right",
+      panel.border = element_rect(colour = "black", fill=NA, size=0.5),
+      panel.grid = element_line(size = rel(0.5)),
+    ) +
     labs(title = "Number of unique sequences",
          x = "ASV length",
          y = "Number of unique sequences",
@@ -1916,4 +1941,58 @@ merge_phyloseq_new <- function (arguments){
   }
   names(merged.list) <- NULL
   return(do.call(phyloseq, merged.list))
+}
+
+rareplot <- function(ps, step="auto", threshold=0){
+  if(step == "auto"){
+    step <- round(max(sample_sums(ps)) / 100)
+  } else if (is.integer(step)){
+    step <- step
+  } else {
+    stop("Step must be an integer or 'auto' ")
+  }
+  ps <- ps %>%
+    prune_samples(sample_sums(.)>0, .) %>% 
+    filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
+  rare <- otu_table(ps) %>%
+    as("matrix") %>%
+    rarecurve(step=step) %>% 
+    purrr::set_names(sample_names(ps)) %>%
+    purrr::map_dfr(., function(x){
+      b <- as.data.frame(x)
+      b <- data.frame(OTU = b[,1], count = rownames(b))
+      b$count <- as.numeric(gsub("N", "",  b$count))
+      return(b)
+    },.id="sample_id") %>%
+    left_join(sample_data(ps)%>%
+                as("matrix") %>%
+                as_tibble() %>%
+                dplyr::select(sample_id, fcid) %>%
+                distinct())
+  
+  gg.rare <- rare %>%
+    ggplot() +
+    geom_line(aes(x = count, y = OTU, group=sample_id), alpha=0.3)+
+    geom_point(data = rare %>% 
+                 group_by(sample_id) %>% 
+                 top_n(1, count),
+               aes(x = count, y = OTU, colour=count > threshold)) +
+    scale_x_continuous(labels =  scales::label_number_si()) +
+    scale_colour_manual(values=c("FALSE" = "#F8766D", "TRUE"="#619CFF"))+
+    facet_wrap(fcid~., scales="free", ncol=1)+
+    theme_bw()+
+    theme(
+      strip.background = element_rect(colour = "black", fill = "lightgray"),
+      strip.text = element_text(size=9, family = ""),
+      plot.background = element_blank(),
+      text = element_text(size=9, family = ""),
+      axis.text = element_text(size=8, family = ""),
+      legend.position = "bottom",
+      panel.border = element_rect(colour = "black", fill=NA, size=0.5),
+      panel.grid = element_line(size = rel(0.5)),
+    ) + labs(x = "Sequence reads",
+         y = "Observed ASVs",
+         colour = "Above sample filtering theshold") 
+  
+  return(gg.rare)
 }
