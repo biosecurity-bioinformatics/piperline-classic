@@ -329,7 +329,7 @@ tar_target(subset_seqtab_path,
            dplyr::mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
                .f = ~step_filter_asvs(
                seqtab = ..2,
-               output = paste0("output/rds/",..1,"_seqtab.cleaned.rds"),
+               pcr_primers = ..1,
                qc_dir = "output/logs/",
                min_length = ..3,
                max_length = ..4,
@@ -468,7 +468,7 @@ tar_target(idtaxa_path, {
       # Write out RDS of the tax table
       saveRDS(..3, paste0("output/rds/",..1,"_",basename(..2)  %>% stringr::str_remove("\\..*$"),"_taxtab.rds"))
     }))
-  out <- paste0("output/rds/",unique(process$pcr_primers),"_",unique(basename(process$idtaxa_db)  %>% stringr::str_remove("\\..*$")),"_taxtab.rds")
+  out <- unique(paste0("output/rds/",process$pcr_primers,"_",basename(process$idtaxa_db  %>% stringr::str_remove("\\..*$")),"_taxtab.rds"))
   return(out)
 }, format="file", iteration = "vector"),
 
@@ -507,7 +507,8 @@ tar_target(idtaxa_path, {
                                         return(blast_res)
                                         } else {
                                           blast_res <- tibble::enframe(getSequences(..3), name=NULL, value="OTU") %>%
-                                            dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
+                                            dplyr::mutate(Genus = NA_character_, Species = NA_character_) %>%
+                                            column_to_rownames("OTU")
                                           saveRDS(blast_res, paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_blast.rds"))
                                           return(blast_res)
                                         }
@@ -518,8 +519,7 @@ tar_target(idtaxa_path, {
         }, format="file", iteration = "vector"),
  
 ## Aggregate taxonomic assignment methods-----------------------------------------------
- tar_target(joint_tax,
-            {
+ tar_target(joint_tax, {
               process <- temp_samdf3 %>%
                 dplyr::select(-one_of("target_gene"))%>%
                 dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
@@ -732,10 +732,17 @@ tar_target(assignment_plot, {
 
 # Write out assignment plot
 tar_target(write_assignment_plot, {
-  pdf(file=paste0("output/logs/taxonomic_assignment_summary.pdf"), width = 11, height = 8 , paper="a4r")
-  print(unique(assignment_plot$plot))
-  try(dev.off(), silent=TRUE)
   out <- paste0("output/logs/taxonomic_assignment_summary.pdf")
+  if(!all(sapply(assignment_plot$plot, is.null))){
+    pdf(file=out, width = 11, height = 8 , paper="a4r")
+      print(unique(assignment_plot$plot))
+    try(dev.off(), silent=TRUE)
+  } else{
+    pdf(file=out, width = 11, height = 8 , paper="a4r")
+      plot.new()
+      text(x=.5, y=.5, "ERROR: No blast hits to reference fasta - assignment plot not created") 
+    try(dev.off(), silent=TRUE)
+  }
   return(out)
 }, format="file", iteration = "vector"),
 
@@ -745,22 +752,20 @@ tar_target(tax_summary, {
   idtaxa_summary <- tax_idtaxa %>%
     ungroup()%>%
     mutate(summary = purrr::map2(idtaxa_ids, idtaxa, ~{
-     t(sapply(.x, function(x) {
-        taxa <- paste0(x$taxon,"_", x$confidence)
-        taxa[startsWith(taxa, "unclassified_")] <- NA
-        taxa
-      })) %>%
-        purrr::map(unlist) %>%
-        stri_list2matrix(byrow=TRUE, fill=NA) %>%
-        magrittr::set_colnames(c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")[1:ncol(.)]) %>%
-        as.data.frame() %>%
+      .x %>%
+      purrr::map_dfr(function(x){
+          taxa <- paste0(x$taxon,"_", x$confidence)
+          taxa[startsWith(taxa, "unclassified_")] <- NA
+          data.frame(t(taxa)) %>%
+            magrittr::set_colnames(c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")[1:ncol(.)])
+        }) %>%
         mutate_all(function(y){
           name <- y %>%
             str_remove("_[0-9].*$")
           conf <- y %>%
             str_remove("^.*_") %>%
             str_trunc(width=6, side="right", ellipsis = "")
-            paste0(name, "_", conf, "%") 
+          paste0(name, "_", conf, "%") 
         }) %>%
         na_if("NA_NA%") %>%
         mutate(OTU = rownames(.y))
@@ -769,11 +774,17 @@ tar_target(tax_summary, {
     unnest(summary) %>%
     distinct()
   
-  blast_summary <- assignment_plot %>%
-    dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, joint)%>% 
-    unnest(joint)  %>%
-    dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, OTU, acc, blast_top_hit = blastspp, 
-                  blast_identity = pident, blast_evalue = evalue, blast_qcov = qcovs)
+  if(!any(sapply(assignment_plot$joint, is.null))){
+    blast_summary <- assignment_plot %>%
+      dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, joint)%>% 
+      unnest(joint)  %>%
+      dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, OTU, acc, blast_top_hit = blastspp, 
+                    blast_identity = pident, blast_evalue = evalue, blast_qcov = qcovs)
+  } else {
+    blast_summary <- assignment_plot %>%
+      dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, joint)%>% 
+      unnest(joint)
+  }
   
   summary_table <- idtaxa_summary %>%
     left_join(blast_summary) %>%
@@ -898,26 +909,28 @@ tar_target(read_tracking, {
     seqateurs::unclassified_to_na() %>%
     as.matrix()
       
-  read_tracker <- temp_samdf1 %>%
-    dplyr::select(sample_name, fcid, pcr_primers) %>%
+  read_tracker <- temp_samdf2 %>%
+    dplyr::select(sample_name, sample_id, fcid, pcr_primers) %>%
+    distinct()%>%
     dplyr::left_join(primer_trim %>%
                 tidyr::unnest(primer_trim) %>%
                 dplyr::select(sample_name, fcid, trimmed_input, trimmed_output, fwd_out) %>%
                 dplyr::mutate(sample_id = basename(fwd_out) %>% stringr::str_remove("_S[0-9]+_R[1-2]_.*$")) %>%
-                dplyr::select(sample_name, sample_id, fcid, input_reads=trimmed_input, trimmed=trimmed_output), by = c("sample_name", "fcid")) %>%
+                dplyr::select(sample_id, fcid, input_reads=trimmed_input, trimmed=trimmed_output), 
+                by = c("sample_id", "fcid")) %>%
     dplyr::left_join(read_filter %>%
                 tidyr::unnest(read_filter) %>%
-                dplyr::select(sample_name, sample_id, fcid, filtered = filter_output),
-              by = c("sample_name", "fcid", "sample_id")) %>%
+                dplyr::select(sample_id, fcid, filtered = filter_output),
+              by = c("fcid", "sample_id")) %>%
     dplyr::left_join(dada %>% 
                 tidyr::unnest(dada2) %>% 
                 dplyr::select(fcid, sample_id, denoised=merged),
               by = c("fcid", "sample_id")
               ) %>%
     dplyr::left_join(filtered_seqtab %>% 
-                dplyr::select(sample_id, sample_name, fcid, chimerafilt=reads_chimerafilt,
+                dplyr::select(sample_id, fcid, chimerafilt=reads_chimerafilt,
                               lengthfilt= reads_lengthfilt, phmmfilt=reads_phmmfilt, framefilt = reads_framefilt),
-              by = c("sample_name", "fcid", "sample_id")
+              by = c("fcid", "sample_id")
               ) %>%
     dplyr::left_join(psmelt(ps_obj) %>% # Could replace this with seqateurs::lowest_classified?
                 dplyr::filter(Abundance > 0) %>%
@@ -946,9 +959,24 @@ tar_target(read_tracking, {
   write_csv(read_tracker, "output/logs/read_tracker.csv")
 
   gg.read_tracker <- read_tracker %>%
-    pivot_longer(cols = -c("sample_name", "sample_id", "fcid", "pcr_primers"),
+    pivot_longer(cols = -c("sample_name","sample_id", "fcid", "pcr_primers"),
                  names_to = "step",
                  values_to="reads") %>%
+    group_by(sample_name) %>%
+    group_modify(~{
+      # When a sample name shares multiple sample ids, select a single sample to avoid double counting
+      if(length(unique(.x$pcr_primers)) >1){
+        .x %>%
+          dplyr::filter(!step == "input_reads") %>%
+          bind_rows(.x %>%
+                      dplyr::filter(step == "input_reads") %>%
+                      mutate(pcr_primers="Mixed",
+                             sample_id=NA_character_) %>%
+                      dplyr::slice(1))
+      } else {
+        .x
+      }
+    }) %>%
     dplyr::mutate(step = factor(step, levels=c(
       "input_reads", "trimmed", "filtered",
       "denoised", "chimerafilt", "lengthfilt", "phmmfilt", "framefilt", 

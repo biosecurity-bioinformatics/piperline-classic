@@ -911,7 +911,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
 # ASV filtering -----------------------------------------------------------
 
 # Group by target loci and apply
-step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_length = NULL, 
+step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max_length = NULL, 
                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
 
   # Handle NA inputs
@@ -1009,7 +1009,7 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
   }
   reads_final <- rowSums(seqtab_final)
   
-  saveRDS(seqtab_final, output)
+  saveRDS(seqtab_final, paste0("output/rds/",pcr_primers,"_seqtab.cleaned.rds"))
   
   # Output a cleanup summary
   cleanup <- seqtab %>%
@@ -1045,10 +1045,12 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
       panel.border = element_rect(colour = "black", fill=NA, size=0.5),
       panel.grid = element_line(size = rel(0.5)),
     ) +
-    labs(title = "Abundance of sequences",
-         x = "ASV length",
-         y = "log10 ASV abundance",
-         fill = "ASV type")
+    labs(
+      title=pcr_primers,
+      subtitle = "Abundance of sequences",
+      x = "ASV length",
+      y = "log10 ASV abundance",
+      fill = "ASV type")
   
   gg.unique <- ggplot(cleanup, aes(x=length, fill=type))+
     geom_histogram(binwidth = 1) + 
@@ -1065,10 +1067,12 @@ step_filter_asvs <- function(seqtab, output, qc_dir, min_length = NULL, max_leng
       panel.border = element_rect(colour = "black", fill=NA, size=0.5),
       panel.grid = element_line(size = rel(0.5)),
     ) +
-    labs(title = "Number of unique sequences",
-         x = "ASV length",
-         y = "Number of unique sequences",
-         fill = "ASV type")
+    labs(
+      title=pcr_primers,
+      subtitle = "Number of unique sequences",
+      x = "ASV length",
+      y = "Number of unique sequences",
+      fill = "ASV type")
   
   # Create combined plot
   out_plot <- gg.abundance / gg.unique
@@ -1112,18 +1116,14 @@ step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FA
     
     # Check that more than just root has been assigned
     if( any(sapply(ids, function(x){ length(x$taxon) }) > 2)){
-      
       #Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
-      tax <- t(sapply(ids, function(x) {
-        taxa <- paste0(x$taxon,"_", x$confidence)
-        taxa[startsWith(taxa, "unclassified_")] <- NA
-        taxa
-      })) %>%
-        purrr::map(unlist) %>%
-        stri_list2matrix(byrow=TRUE, fill=NA) %>%
-        magrittr::set_colnames(ranks[1:ncol(.)]) %>%
-        as.data.frame() %>%
-        #magrittr::set_rownames(getSequences(seqtab)) %>%
+      tax <- ids %>%
+        purrr::map_dfr(function(x){
+          taxa <- paste0(x$taxon,"_", x$confidence)
+          taxa[startsWith(taxa, "unclassified_")] <- NA
+          data.frame(t(taxa)) %>%
+            magrittr::set_colnames(ranks[1:ncol(.)])
+        }) %>%
         mutate_all(stringr::str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
         magrittr::set_rownames(getSequences(seqtab)) 
     } else {
