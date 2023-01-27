@@ -63,6 +63,8 @@ For example:
       ├── data/
          ├── CJL7D/
          
+You will also need BLAST+ installed on your computer, it can be downloaded from the [NCBI website](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download) 
+         
 ## Demultiplex sequencing reads
 For this workflow to run, we need to first demultiplex the miseq run again as the miseq does not put indexes in fasta headers by default, and also obtain some necessary files from the sequencing folder. The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
 
