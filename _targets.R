@@ -804,8 +804,9 @@ tar_target(tax_summary, {
        seqtab = merged_seqtab_path,
        taxtab = merged_tax,
        samdf = temp_samdf2,
-       seqs_path=NULL,
-       phy_path=NULL)
+       seqs=NULL,
+       phylo=NULL,
+       name_variants=TRUE)
     out <- "output/rds/ps.rds"
     saveRDS(process, out)
     return(out)
@@ -816,8 +817,8 @@ tar_target(tax_summary, {
     ps_obj <- ps %>%
       readRDS()
     
-    out <- c(step_output_summary(ps_obj, out_dir="output/results/unfiltered", rank="Species", type="unfiltered"),
-             step_output_ps(ps_obj, out_dir="output/results/unfiltered"))
+    out <- c(step_output_summary(ps_obj, out_dir="output/results/unfiltered", type="unfiltered"),
+             step_output_ps(ps_obj, out_dir="output/results/unfiltered", type="unfiltered"))
     return(out)
   }, format="file", iteration = "vector"),
 
@@ -887,8 +888,8 @@ tar_target(ps_filt_summary, {
   ps_obj <- ps_filtered %>%
     readRDS()
   
-  out <- c(step_output_summary(ps_obj, out_dir="output/results/unfiltered", rank="Species", type="unfiltered"),
-           step_output_ps(ps_obj, out_dir="output/results/unfiltered"))
+  out <- c(step_output_summary(ps_obj, out_dir="output/results/filtered", type="filtered"),
+           step_output_ps(ps_obj, out_dir="output/results/filtered", type="filtered"))
   return(out)
 }, format="file", iteration = "vector"),
 

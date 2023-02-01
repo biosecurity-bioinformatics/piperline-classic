@@ -77,7 +77,6 @@ step_validate_folders <- function(project_dir){
   list("data",
        "reference",
        "output/logs",
-       "output/results/final",
        "output/results/unfiltered",
        "output/results/filtered",
        "output/rds",
@@ -1302,7 +1301,7 @@ step_phangorn <- function(seqtab, output=NULL){
   
 }
 
-step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
+step_phyloseq <- function(seqtab, taxtab, samdf, seqs=NULL, phylo=NULL, name_variants=FALSE){
 
   # Check if seqtab is a path
   if(is(seqtab, "character")){
@@ -1330,17 +1329,34 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
       stop("samdf does not exist")
     }
   } 
-  if(is.null(seqs_path)){
+  # Check if samdf is a path - if so read in
+  if(is(seqs, "character")){
+    if (file.exists(seqs)){
+      seqs <- readRDS(normalizePath(seqs))
+      names(seqs) <- seqs
+    } else {
+      stop("seqs path does not exist")
+    }
+  } else if (class(seqs) == "DNAStringSet"){
+    seqs <- seqs
+  } else {
     seqs <- DNAStringSet(colnames(seqtab))
     names(seqs) <- seqs
-  } else {
-    seqs <- readRDS(normalizePath(seqs_path))
   }
-  if(!is.null(phy_path)){
-    phy <- read.tree(normalizePath(seqtab_path))
+  
+  #Check if phy is a path - if so read in
+  if(is(phylo, "character")){
+    if (file.exists(phylo)){
+      phy <- read.tree(normalizePath(phylo))
+    } else {
+      stop("phy path does not exist")
+    }
+  } else if (class(phylo) == "phylo"){
+    phy <- phylo
   } else {
     phy <- NULL
   }
+  
   #Extract start of sequence names
   rownames(seqtab) <- stringr::str_remove(rownames(seqtab), pattern="_S[0-9]+_R[1-2]_.*$")
   
@@ -1370,6 +1386,11 @@ step_phyloseq <- function(seqtab, taxtab, samdf, seqs_path=NULL, phy_path=NULL){
                    phy_tree(phy),
                    phyloseq::refseq(seqs))
   }
+  
+  if(name_variants){
+    taxa_names(ps) <- paste0("SV", seq(ntaxa(ps)),"-",tax_table(ps)[,8])
+  }
+  
   if(nrow(seqtab) > nrow(phyloseq::sample_data(ps))){
     message("Warning: the following samples were not included in phyloseq object, check sample names match the sample metadata")
     message(rownames(seqtab)[!rownames(seqtab) %in% sample_names(ps)])
@@ -1550,7 +1571,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
 }
 
 # Export samples
-step_output_summary <- function(ps, rank="Species", out_dir, type="unfiltered"){
+step_output_summary <- function(ps, out_dir, type="unfiltered"){
   #Export raw csv
   speedyseq::psmelt(ps) %>%
     filter(Abundance > 0) %>%
@@ -1558,16 +1579,23 @@ step_output_summary <- function(ps, rank="Species", out_dir, type="unfiltered"){
     write_csv(normalizePath(paste0(out_dir,"/raw_", type,".csv")))
   
   # Export species level summary of filtered results
-  seqateurs::summarise_taxa(ps, rank=rank, "sample_id") %>%
-    spread(key="sample_id", value="totalRA") %>%
-    write.csv(file = normalizePath(paste0(out_dir,"/",rank,"_",type,"summary.csv")))
+  ps %>%
+    psmelt() %>%
+    filter(Abundance > 0) %>%
+    left_join(refseq(ps) %>% as.character() %>% enframe(name="OTU", value="sequence")) %>%
+    dplyr::select(OTU, sequence, rank_names(ps), sample_id, Abundance ) %>%
+    pivot_wider(names_from = sample_id,
+                values_from = Abundance,
+                values_fill = list(Abundance = 0)) %>%
+    write.csv(file = normalizePath(paste0(out_dir,"/",type,"_summary.csv")))
 
   #Output fasta of all ASV's
-  seqateurs::ps_to_fasta(ps, normalizePath(paste0(out_dir,"/asvs_",type,".fasta")), seqnames=rank)
-  
+  seqs <- Biostrings::DNAStringSet(as.vector(phyloseq::refseq(ps)))
+  Biostrings::writeXStringSet(seqs, filepath = normalizePath(paste0(out_dir,"/asvs_",type,".fasta")), width = 100) 
+
   out_paths <- c(
     paste0(out_dir,"/raw_", type,".csv"),
-    paste0(out_dir,"/",rank,"_",type,"summary.csv"),
+    paste0(out_dir,"/summary_",type,".csv"),
     paste0(out_dir,"/asvs_",type,".fasta")
   )
   if(!is.null(phy_tree(ps, errorIfNULL = FALSE))){
