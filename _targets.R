@@ -94,10 +94,14 @@ list(
 tar_target(primer_trim,
            {
              temp_samdf1 %>%
-               dplyr::mutate(primer_trim = purrr::pmap(dplyr::select(., sample_id, for_primer_seq, rev_primer_seq, pcr_primers, fcid),
-                                                .f = ~step_primer_trim(sample_id = ..1, for_primer_seq=..2, rev_primer_seq=..3, pcr_primers = ..4,
-                                                                       input_dir = paste0("data/",..5), output_dir =  paste0("data/",..5,"/01_trimmed"),
-                                                                       qc_dir=paste0("output/logs/",..5), quiet = FALSE)))%>%
+               dplyr::left_join(params %>% 
+                                  dplyr::select(target_gene, pcr_primers, max_primer_mismatch), by = "pcr_primers") %>%
+               dplyr::mutate(primer_trim = purrr::pmap(dplyr::select(., sample_id, for_primer_seq, rev_primer_seq, pcr_primers, fcid, max_primer_mismatch),
+                                                       .f = ~step_primer_trim(sample_id = ..1, for_primer_seq=..2, rev_primer_seq=..3, pcr_primers = ..4,
+                                                                              input_dir = paste0("data/",..5), output_dir =  paste0("data/",..5,"/01_trimmed"),
+                                                                              qc_dir=paste0("output/logs/",..5),
+                                                                              max_mismatch=..6,
+                                                                              quiet = FALSE)))%>%
                dplyr::select(sample_id, sample_name, fcid, primer_trim)
            },
            pattern = map(temp_samdf1), iteration = "vector"),

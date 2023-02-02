@@ -543,7 +543,7 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
 
 # Primer trimming ---------------------------------------------------------
 step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_primer_seq, rev_primer_seq, pcr_primers,
-                             n = 1e6, qualityType = "Auto", check_paired = TRUE, compress =TRUE, quiet=FALSE){
+                             max_mismatch = 0, n = 1e6, qualityType = "Auto", check_paired = TRUE, compress =TRUE, quiet=FALSE){
   input_dir <- normalizePath(input_dir)
   output_dir <- normalizePath(output_dir)
   qc_dir <- normalizePath(qc_dir)
@@ -561,7 +561,7 @@ step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_prime
   
   # Create output directory if it doesnt exist
   if(!dir.exists(output_dir)) {dir.create(output_dir)}
-
+  
   # Create qc_dir if it doesnt exist
   if(!dir.exists(qc_dir)) {dir.create(qc_dir, recursive = TRUE)}
   
@@ -599,78 +599,23 @@ step_primer_trim <- function(sample_id, input_dir, output_dir, qc_dir, for_prime
   
   # Demultiplex reads and trim primers
   res <- trim_primers(fwd = fastqFs,
-                     rev = fastqRs,
-                     fwd_out = fwd_out,
-                     rev_out = rev_out,
-                     for_primer_seq = stringr::str_replace_all(for_primer_seq, "I", "N"),
-                     rev_primer_seq = stringr::str_replace_all(rev_primer_seq, "I", "N"),
-                     n = n, qualityType = qualityType, check_paired = check_paired,
-                     compress =compress, quiet=quiet
+                      rev = fastqRs,
+                      fwd_out = fwd_out,
+                      rev_out = rev_out,
+                      for_primer_seq = stringr::str_replace_all(for_primer_seq, "I", "N"),
+                      rev_primer_seq = stringr::str_replace_all(rev_primer_seq, "I", "N"),
+                      n = n, qualityType = qualityType, check_paired = check_paired,
+                      compress =compress, quiet=quiet
   ) %>%
     dplyr::mutate(fwd_out = fwd_out,
-           rev_out = rev_out)
+                  rev_out = rev_out)
   return(res)
 }
 
-
-# Read filtering ----------------------------------------------------------
-
-step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20, max_length = Inf,
-                              max_ee = 1, trunc_length = 150, trim_left = 0, trim_right = 0,
-                              quiet=FALSE, ...){
-  input_dir <- normalizePath(input_dir)
-  output_dir <- normalizePath(output_dir)
-  
-  # Check that required files exist
-  if(!dir.exists(input_dir)) {
-    stop("input_dir doesnt exist, check that the correct path was provided")
-  }
-  # Create output directory if it doesn't exist
-  if(!dir.exists(output_dir)) {dir.create(output_dir)}
-  
-  fastqFs <- normalizePath(fs::dir_ls(path = input_dir, glob = paste0("*",sample_id, "_S*_R1_*")))
-  fastqRs <- normalizePath(fs::dir_ls(path = input_dir, glob = paste0("*",sample_id, "_S*_R2_*")))
-
-  if(length(fastqFs) != length(fastqRs)) stop(paste0("Forward and reverse files for ",sample_id," do not match."))
-
-  # Handle NA inputs
-  if(is.na(min_length)){min_length <- 20}
-  if(is.na(max_length)){max_length <- Inf}
-  if(is.na(max_ee)){max_ee <- Inf}
-  if(is.na(trunc_length)){trunc_length <- 0}
-  if(is.na(trim_left)){trim_left <- 0}
-  if(is.na(trim_right)){trim_right <- 0}
-  
-  # Run read filter
-  res <- dada2::filterAndTrim(
-    fwd = fastqFs, filt = file.path(output_dir, basename(fastqFs)),
-    rev = fastqRs, filt.rev = file.path(output_dir, basename(fastqRs)),
-    minLen = min_length, maxLen = max_length, maxEE = max_ee, truncLen = trunc_length,
-    trimLeft = trim_left, trimRight = trim_right, rm.phix = TRUE, 
-    multithread = FALSE, compress = TRUE, verbose = !quiet) %>% 
-    as_tibble() %>%
-    dplyr::rename(filter_input = reads.in,
-                  filter_output = reads.out) %>%
-    dplyr::mutate(fwd_out = file.path(output_dir, basename(fastqFs)),
-           rev_out = file.path(output_dir, basename(fastqRs)))
-
-  if(res$filter_output > 0){
-    filtered_summary <- res %>% 
-      as.data.frame() %>%
-      tibble::rownames_to_column("sample") %>%
-      dplyr::mutate(reads_remaining = signif(((filter_output / filter_input) * 100), 2)) %>%
-      dplyr::filter(!is.na(reads_remaining))
-    
-    if (filtered_summary$reads_remaining < 10) {
-      message(paste0("WARNING: Less than 10% reads remaining for ",
-                     filtered_summary$sample), "Check filtering parameters ")
-    }
-  }
-  return(res)
-}
-
+# Primer trimming function
 trim_primers <- function(fwd, rev, fwd_out, rev_out, for_primer_seq, rev_primer_seq, 
-            n = 1e6, qualityType = "Auto", check_paired = TRUE, id.field = NULL, id.sep = "\\s", compress =TRUE, quiet=FALSE){
+                         n = 1e6, qualityType = "Auto", check_paired = TRUE, id.field = NULL, 
+                         max_mismatch=0, id.sep = "\\s", compress =TRUE, quiet=FALSE){
   
   ## iterating through forward and reverse files using fastq streaming
   fF <- ShortRead::FastqStreamer(file.path(fwd), n = n)
@@ -685,7 +630,7 @@ trim_primers <- function(fwd, rev, fwd_out, rev_out, for_primer_seq, rev_primer_
   
   # Check if number of F and R primers match the number of outfiles
   if (!all.equal(length(fwd_out), length(rev_out), length(for_primer_seq), length(rev_primer_seq))) {
-      stop("fwd_out and rev_out must be the same length as for_primer_seq and rev_primer_seq")
+    stop("fwd_out and rev_out must be the same length as for_primer_seq and rev_primer_seq")
   }
   
   #if(!C_isACGT(primer)) stop("Non-ACGT characters detected in primers")
@@ -775,26 +720,26 @@ trim_primers <- function(fwd, rev, fwd_out, rev_out, for_primer_seq, rev_primer_
         subject= IRanges::narrow(sread(fqF), 1, barlenF),
         starting.at=1,
         with.indels=FALSE,
-        fixed=FALSE )==0
+        fixed=FALSE ) <= max_mismatch
       
       keepR <- Biostrings::neditStartingAt(
         pattern= Biostrings::DNAString(rev_primer_seq[p]),
         subject= IRanges::narrow(sread(fqR), 1, barlenR),
         starting.at=1,
         with.indels=FALSE,
-        fixed=FALSE )==0
+        fixed=FALSE ) <= max_mismatch
       
       # Only keep reads where forward primer is present in F, and reverse in R
       keep <- keepF & keepF
       
       fqF_primer <- suppressWarnings(ShortRead::ShortReadQ(sread=ShortRead::sread(fqF[keep]), 
-                       quality=Biostrings::quality(Biostrings::quality(fqF[keep])),
-                       id=ShortRead::id(fqF[keep])))
+                                                           quality=Biostrings::quality(Biostrings::quality(fqF[keep])),
+                                                           id=ShortRead::id(fqF[keep])))
       
       fqR_primer <- suppressWarnings(ShortRead::ShortReadQ(sread=ShortRead::sread(fqR[keep]), 
-                        quality=Biostrings::quality(Biostrings::quality(fqR[keep])),
-                        id=ShortRead::id(fqR[keep])))
-  
+                                                           quality=Biostrings::quality(Biostrings::quality(fqR[keep])),
+                                                           id=ShortRead::id(fqR[keep])))
+      
       # Trim primers from left side
       startF <- max(1, barlenF + 1, na.rm=TRUE)
       startR <- max(1, barlenR + 1, na.rm=TRUE)
@@ -841,6 +786,62 @@ trim_primers <- function(fwd, rev, fwd_out, rev_out, for_primer_seq, rev_primer_
   return(out)
 }
 
+
+# Read filtering ----------------------------------------------------------
+
+step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20, max_length = Inf,
+                              max_ee = 1, trunc_length = 150, trim_left = 0, trim_right = 0,
+                              quiet=FALSE, ...){
+  input_dir <- normalizePath(input_dir)
+  output_dir <- normalizePath(output_dir)
+  
+  # Check that required files exist
+  if(!dir.exists(input_dir)) {
+    stop("input_dir doesnt exist, check that the correct path was provided")
+  }
+  # Create output directory if it doesn't exist
+  if(!dir.exists(output_dir)) {dir.create(output_dir)}
+  
+  fastqFs <- normalizePath(fs::dir_ls(path = input_dir, glob = paste0("*",sample_id, "_S*_R1_*")))
+  fastqRs <- normalizePath(fs::dir_ls(path = input_dir, glob = paste0("*",sample_id, "_S*_R2_*")))
+
+  if(length(fastqFs) != length(fastqRs)) stop(paste0("Forward and reverse files for ",sample_id," do not match."))
+
+  # Handle NA inputs
+  if(is.na(min_length)){min_length <- 20}
+  if(is.na(max_length)){max_length <- Inf}
+  if(is.na(max_ee)){max_ee <- Inf}
+  if(is.na(trunc_length)){trunc_length <- 0}
+  if(is.na(trim_left)){trim_left <- 0}
+  if(is.na(trim_right)){trim_right <- 0}
+  
+  # Run read filter
+  res <- dada2::filterAndTrim(
+    fwd = fastqFs, filt = file.path(output_dir, basename(fastqFs)),
+    rev = fastqRs, filt.rev = file.path(output_dir, basename(fastqRs)),
+    minLen = min_length, maxLen = max_length, maxEE = max_ee, truncLen = trunc_length,
+    trimLeft = trim_left, trimRight = trim_right, rm.phix = TRUE, 
+    multithread = FALSE, compress = TRUE, verbose = !quiet) %>% 
+    as_tibble() %>%
+    dplyr::rename(filter_input = reads.in,
+                  filter_output = reads.out) %>%
+    dplyr::mutate(fwd_out = file.path(output_dir, basename(fastqFs)),
+           rev_out = file.path(output_dir, basename(fastqRs)))
+
+  if(res$filter_output > 0){
+    filtered_summary <- res %>% 
+      as.data.frame() %>%
+      tibble::rownames_to_column("sample") %>%
+      dplyr::mutate(reads_remaining = signif(((filter_output / filter_input) * 100), 2)) %>%
+      dplyr::filter(!is.na(reads_remaining))
+    
+    if (filtered_summary$reads_remaining < 10) {
+      message(paste0("WARNING: Less than 10% reads remaining for ",
+                     filtered_summary$sample), "Check filtering parameters ")
+    }
+  }
+  return(res)
+}
 
 #  DADA2 ------------------------------------------------------------------
 
