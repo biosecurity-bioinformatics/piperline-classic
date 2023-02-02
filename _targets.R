@@ -35,13 +35,71 @@ tar_option_set(packages = c(
 
 # Targets pipeline
 list(
-  # Track files
+
+  # Parameter setup ---------------------------------------------------------
+  # Track input files
   tar_file(samdf_file, "sample_data/Sample_info.csv"),
   tar_file(params_file, "sample_data/loci_params.csv"),
   
-  # Load sample tracking files
+  # Load input tracking files
   tar_target(samdf, read_csv(samdf_file)),
   tar_target(params,read_csv(params_file)),
+  
+  # Create temporary params_primer file for tracking
+  tar_file(params_primer_path,{
+    out <- "output/temp/params_primer.csv"
+    params %>% 
+      dplyr::select(pcr_primers, target_gene, max_primer_mismatch) %>%
+      write_csv(out)
+    return(out)
+  }),
+  tar_target(params_primer,read_csv(params_primer_path)),
+  
+  # Create temporary params_readfilter file for tracking
+  tar_file(params_readfilter_path,{
+    out <- "output/temp/params_readfilter.csv"
+    params %>% 
+      dplyr::select(pcr_primers, target_gene, read_min_length, read_max_length, read_max_ee, 
+                    read_trunc_length, read_trim_left, read_trim_right) %>%
+      write_csv(out)
+    return(out)
+  }),
+  tar_target(params_readfilter, read_csv(params_readfilter_path)),
+  
+  # Create temporary params_asvfilter file for tracking
+  tar_file(params_asvfilter_path,{
+    out <- "output/temp/params_asvfilter.csv"
+    params %>% 
+      dplyr::select(pcr_primers, target_gene, asv_min_length, asv_max_length,
+                    phmm, coding, genetic_code) %>%
+      write_csv(out)
+    return(out)
+  }),
+  tar_target(params_asvfilter, read_csv(params_asvfilter_path)),
+  
+  # Create temporary params_database file for tracking
+  tar_file(params_database_path,{
+    out <- "output/temp/params_database.csv"
+    params %>% 
+      dplyr::select(pcr_primers, target_gene, idtaxa_db, idtaxa_confidence, 
+                    ref_fasta, blast_min_identity, run_blast) %>%
+      write_csv(out)
+    return(out)
+  }),
+  tar_target(params_database, read_csv(params_database_path)),
+  
+  # Create temporary params_ps file for tracking
+  tar_file(params_ps_path,{
+    out <- "output/temp/params_ps.csv"
+    params %>% 
+      dplyr::select(pcr_primers, target_gene, target_kingdom, target_phylum, target_class,
+                     target_order, target_family, target_genus, target_species, 
+                     min_sample_reads, min_taxa_reads, min_taxa_ra) %>%
+      write_csv(out)
+    return(out)
+  }),
+  tar_target(params_ps, read_csv(params_ps_path)),
+  
   
   # Create directories
   tar_target(create_dirs,  step_validate_folders(getwd())),
@@ -50,11 +108,11 @@ list(
   tar_files(
     fastq_path,
     purrr::map(list.dirs("data", recursive=FALSE),
-                          list.files, pattern="_R1_", full.names = TRUE) %>%
+                          list.files, pattern="_R[12]_", full.names = TRUE) %>%
       unlist() 
   ),
 
-  tar_target(temp_samdf1, step_check_files(samdf, fastq_path)),
+  tar_target(temp_samdf1, step_check_files(samdf, fastq_path, col_name="starting")),
   
   tar_group_by(temp_samdf1_grouped, temp_samdf1, fcid),
 
@@ -94,8 +152,7 @@ list(
 tar_target(primer_trim,
            {
              temp_samdf1 %>%
-               dplyr::left_join(params %>% 
-                                  dplyr::select(target_gene, pcr_primers, max_primer_mismatch), by = "pcr_primers") %>%
+               dplyr::left_join(params_primer, by = "pcr_primers") %>%
                dplyr::mutate(primer_trim = purrr::pmap(dplyr::select(., sample_id, for_primer_seq, rev_primer_seq, pcr_primers, fcid, max_primer_mismatch),
                                                        .f = ~step_primer_trim(sample_id = ..1, for_primer_seq=..2, rev_primer_seq=..3, pcr_primers = ..4,
                                                                               input_dir = paste0("data/",..5), output_dir =  paste0("data/",..5,"/01_trimmed"),
@@ -129,7 +186,7 @@ tar_target(primer_trim_path,
    temp_samdf1 %>%
                     dplyr::select(-where(is.list)) %>%
                     step_demux_samdf() %>%
-                    step_check_files(primer_trim_path)
+                    step_check_files(primer_trim_path, col_name="trimmed")
    }),
 
 # Filter reads ------------------------------------------------------------
@@ -137,9 +194,7 @@ tar_target(primer_trim_path,
              {
              temp_samdf2 %>%
                 dplyr::select(sample_id, sample_name, pcr_primers, fcid) %>%
-                dplyr::left_join(params %>% 
-                          dplyr::select(target_gene, pcr_primers, read_min_length, read_max_length, read_max_ee, 
-                                        read_trunc_length, read_trim_left, read_trim_right), by = "pcr_primers") %>%
+                dplyr::left_join(params_readfilter, by = "pcr_primers") %>%
                  dplyr::mutate(read_filter = purrr::pmap(dplyr::select(., sample_id, fcid, read_min_length, read_max_length, read_max_ee, 
                                                                 read_trunc_length, read_trim_left, read_trim_right),
                    .f = ~step_filter_reads(
@@ -180,7 +235,7 @@ tar_target(read_filter_path,
  tar_target(temp_samdf3, {
    temp_samdf2 %>%
            dplyr::select(-where(is.list)) %>%
-           step_check_files(read_filter_path) 
+           step_check_files(read_filter_path, col_name="filtered") 
  }),
 
 
@@ -323,7 +378,7 @@ tar_target(subset_seqtab_path,
  tar_target(filtered_seqtab, {
           temp_samdf3 %>%
            dplyr::select(-one_of("asv_min_length", "asv_max_length", "phmm", "coding", "genetic_code"))%>%
-           dplyr::left_join(params %>% dplyr::select(pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code)) %>%
+           dplyr::left_join(params_asvfilter, by="pcr_primers") %>%
            dplyr::group_by(pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
            tidyr::nest() %>%
            dplyr::mutate(subset_seqtab = purrr::map(pcr_primers, ~{
@@ -403,7 +458,7 @@ tar_target(write_seqtab_qualplots, {
 
 # Assign taxonomy ---------------------------------------------------------
   tar_file(idtaxa_db_tracked,{
-           out <- params  %>%
+           out <- params_database  %>%
              dplyr::pull(idtaxa_db) %>%
              unique()%>%
              stringr::str_split(pattern=";", n=Inf) %>% 
@@ -417,7 +472,7 @@ tar_target(write_seqtab_qualplots, {
   }
   ),
   tar_file(ref_fasta_tracked,{
-           out <- params  %>%
+           out <- params_database  %>%
              dplyr::pull(ref_fasta) %>%
              unique() %>%
              stringr::str_split(pattern=";", n=Inf) %>% 
@@ -435,7 +490,7 @@ tar_target(write_seqtab_qualplots, {
  tar_target(tax_idtaxa,{ 
    temp_samdf3 %>%
      dplyr::select(-one_of("target_gene", "idtaxa_db"))%>%
-     dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, idtaxa_confidence)) %>%
+     dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, idtaxa_confidence)) %>%
      tidyr::separate_rows(idtaxa_db, sep=";") %>%
      dplyr::group_by(target_gene, pcr_primers, idtaxa_db, idtaxa_confidence) %>%
      tidyr::nest()  %>% 
@@ -481,7 +536,7 @@ tar_target(idtaxa_path, {
             {
            process <- temp_samdf3 %>%
              dplyr::select(-one_of("target_gene", "ref_fasta"))%>%
-             dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, ref_fasta, blast_min_identity, run_blast)) %>%
+             dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, ref_fasta, blast_min_identity, run_blast)) %>%
              tidyr::separate_rows(ref_fasta, sep=";") %>%
              dplyr::group_by(target_gene, pcr_primers, blast_min_identity,ref_fasta, run_blast) %>%
              tidyr::nest()  %>% 
@@ -526,7 +581,7 @@ tar_target(idtaxa_path, {
  tar_target(joint_tax, {
               process <- temp_samdf3 %>%
                 dplyr::select(-one_of("target_gene"))%>%
-                dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
+                dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
                 dplyr::group_by(pcr_primers) %>%
                 tidyr::nest() %>%
                 dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
@@ -606,7 +661,7 @@ tar_target(idtaxa_path, {
             {
               process <- temp_samdf3 %>%
                 dplyr::select(-one_of("target_gene"))%>%
-                dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene)) %>%
+                dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene)) %>%
                 tidyr::nest(data=everything()) %>%
                 dplyr::mutate(merged_seqtab = list(readRDS(merged_seqtab_path)))%>%
                 dplyr::mutate(merged_tax = purrr::map2(data, merged_seqtab,
@@ -659,7 +714,7 @@ tar_target(idtaxa_path, {
 tar_target(assignment_plot, {
   temp_samdf3 %>%
     dplyr::select(-one_of("target_gene", "idtaxa_db"))%>%
-    dplyr::left_join(params %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
+    dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
     tidyr::separate_rows(ref_fasta, sep=";") %>%
     dplyr::group_by(target_gene, pcr_primers, idtaxa_db, ref_fasta) %>%
     tidyr::nest()  %>% 
@@ -832,7 +887,7 @@ tar_target(tax_summary, {
 tar_target(accumulation_curve, {
   ps_obj <- ps %>%
     readRDS()
-  gg.acc_curve <- rareplot(ps_obj, step="auto", threshold = max(params$min_sample_reads))
+  gg.acc_curve <- rareplot(ps_obj, step="auto", threshold = max(params_ps$min_sample_reads))
   out <- "output/logs/accumulation_curve.pdf"
   pdf(file=out, width = 11, height = 8 , paper="a4r")
     print(gg.acc_curve)
@@ -844,7 +899,7 @@ tar_target(accumulation_curve, {
 # Taxonomic and minimum abundance filtering
 tar_target(ps_filtered,{
      # if multiple primers were used - split ps into different primers
-    process <-  params %>%
+    process <-  params_ps %>%
        dplyr::mutate(ps_obj = purrr::map(pcr_primers,
               .f = ~{
                     physeq <- ps %>%

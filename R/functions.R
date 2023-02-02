@@ -51,25 +51,46 @@ step_add_params <- function(samdf, params){
   return(out)
 }
 
-step_check_files <- function(samdf, files){
+step_check_files <- function(samdf, files, col_name=NULL){
+  # Get file names
   fastqFs <- files[stringr::str_detect(files, "_R1_")]
-  fastqFs <- basename(fastqFs) %>%
+  fastqRs <- files[stringr::str_detect(files, "_R2_")]
+  
+  # Get file name to check
+  namecheck <- basename(fastqFs) %>%
     stringr::str_remove(pattern = "^(.*)\\/") %>%
     stringr::str_remove(pattern = "(?:.(?!_S))+$")
-  fastqFs <- fastqFs[!stringr::str_detect(fastqFs, "Undetermined")]
+  namecheck <- namecheck[!stringr::str_detect(namecheck, "Undetermined")]
   
   #Check missing in samplesheet
-  if (length(setdiff(fastqFs, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(fastqFs, samdf$sample_id), " are not in the sample sheet") }
+  if (length(setdiff(namecheck, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(namecheck, samdf$sample_id), " are not in the sample sheet") }
   
   #Check missing fastqs
-  if (length(setdiff(samdf$sample_id, fastqFs)) > 0) {
+  if (length(setdiff(samdf$sample_id, namecheck)) > 0) {
     warning(paste0("The fastq file: ",
-                   setdiff(samdf$sample_id, fastqFs),
+                   setdiff(samdf$sample_id, namecheck),
                    " is missing, dropping from samplesheet \n")) 
     samdf <- samdf %>%
-      filter(!sample_id %in% setdiff(samdf$sample_id, fastqFs))
+      filter(!sample_id %in% setdiff(samdf$sample_id, namecheck))
   }
-  return(samdf)
+  
+  # Hash the file to make sure they havent changed
+  fwd_col_name = paste0(col_name, "_fwd")
+  rev_col_name = paste0(col_name, "_rev")
+  out <- samdf %>%
+    mutate(!!fwd_col_name := purrr::map_chr(sample_id,~{
+      str_to_check <- basename(fastqFs) %>%
+        stringr::str_remove(pattern = "^(.*)\\/") %>%
+        stringr::str_remove(pattern = "(?:.(?!_S))+$")
+      rlang::hash_file(fastqFs[str_to_check==.x])
+    }))%>%
+    mutate(!!rev_col_name := purrr::map_chr(sample_id,~{
+      str_to_check <- basename(fastqRs) %>%
+        stringr::str_remove(pattern = "^(.*)\\/") %>%
+        stringr::str_remove(pattern = "(?:.(?!_S))+$")
+      rlang::hash_file(fastqRs[str_to_check==.x])
+    }))
+  return(out)
 }
 
 step_validate_folders <- function(project_dir){
@@ -80,6 +101,7 @@ step_validate_folders <- function(project_dir){
        "output/results/unfiltered",
        "output/results/filtered",
        "output/rds",
+       "output/temp",
        "sample_data") %>%
     purrr::map(normalizePath) %>%
     purrr::walk(function(x){
