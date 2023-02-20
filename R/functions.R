@@ -203,7 +203,7 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
       stringr::str_detect(tile, "^11") ~ "Top",
       stringr::str_detect(tile, "^21") ~ "Bottom"
     ))%>%
-    ggplot(aes(x=lane, y=as.factor(tile), fill=Average_intensity)) +
+    ggplot2::ggplot(aes(x=lane, y=as.factor(tile), fill=Average_intensity)) +
     geom_tile() +
     facet_wrap(~side, scales="free") +
     scale_fill_viridis_c()
@@ -432,7 +432,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
     dplyr::group_by(Sample_Name, index, index2) %>%
     summarise(Freq = sum(Freq))%>%
     dplyr::mutate(index = factor(index, levels=sample_orders$index), index2=factor(index2, levels=rev(sample_orders$index2)))  %>%
-    ggplot(aes(x = index, y = index2), stat="identity") +
+    ggplot2::ggplot(aes(x = index, y = index2), stat="identity") +
     geom_tile(aes(fill = Freq),alpha=0.8)  + 
     scale_fill_viridis_c(name="log10 Reads", begin=0.1, trans="log10")+
     theme(axis.text.x = element_text(angle=90, hjust=1), 
@@ -474,7 +474,7 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
   gg.Fqual <- Fquals %>% 
     dplyr::select(Cycle, reads, starts_with("Q")) %>% 
     tidyr::pivot_longer(cols = starts_with("Q")) %>% 
-    ggplot(aes(x = Cycle, y = value, colour = name)) + 
+    ggplot2::ggplot(aes(x = Cycle, y = value, colour = name)) + 
     geom_line(data = Fquals, aes(y = QMean), color = "#66C2A5") + 
     geom_line(data = Fquals, aes(y = Q25), color = "#FC8D62", size = 0.25, linetype = "dashed") + 
     geom_line(data = Fquals, aes(y = Q50), color = "#FC8D62", size = 0.25) + 
@@ -486,7 +486,7 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
   gg.Rqual <- Rquals %>% 
     dplyr::select(Cycle, reads, starts_with("Q")) %>% 
     tidyr::pivot_longer(cols = starts_with("Q")) %>% 
-    ggplot(aes(x = Cycle, y = value, colour = name)) + 
+    ggplot2::ggplot(aes(x = Cycle, y = value, colour = name)) + 
     geom_line(data = Rquals, aes(y = QMean), color = "#66C2A5") + 
     geom_line(data = Rquals, aes(y = Q25), color = "#FC8D62", size = 0.25, linetype = "dashed") + 
     geom_line(data = Rquals, aes(y = Q50), color = "#FC8D62", size = 0.25) + 
@@ -502,7 +502,7 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
     tidyr::pivot_longer(cols = starts_with("EE")) %>% 
     dplyr::group_by(name) %>%  # Remove EE and replace with percentage at end? - i.e lower 10%
     dplyr::mutate(cumsumEE = cumsum(value)) %>%
-    ggplot(aes(x = Cycle, y = log10(cumsumEE), colour = name)) + 
+    ggplot2::ggplot(aes(x = Cycle, y = log10(cumsumEE), colour = name)) + 
     geom_point(size = 1) + 
     geom_hline(yintercept = log10(1), color = "red") + 
     geom_hline(yintercept = log10(2), color = "red") + 
@@ -526,7 +526,7 @@ plot_read_quals <- function(sample_id, input_dir, truncLen = NULL, quiet=FALSE, 
     tidyr::pivot_longer(cols = starts_with("EE")) %>% 
     dplyr::group_by(name) %>% 
     dplyr::mutate(cumsumEE = cumsum(value)) %>%
-    ggplot(aes(x = Cycle, y = log10(cumsumEE), colour = name)) + 
+    ggplot2::ggplot(aes(x = Cycle, y = log10(cumsumEE), colour = name)) + 
     geom_point(size = 1) + 
     geom_hline(yintercept = log10(1), color = "red") + 
     geom_hline(yintercept = log10(2), color = "red") + 
@@ -1052,7 +1052,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   write_csv(cleanup, paste0(qc_dir,"/ASV_cleanup_summary.csv"))
   
   # Output length distribution plots
-  gg.abundance <- ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
+  gg.abundance <- ggplot2::ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
     geom_bar(stat="identity") + 
     scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
     theme_bw()+
@@ -1074,7 +1074,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
       y = "log10 ASV abundance",
       fill = "ASV type")
   
-  gg.unique <- ggplot(cleanup, aes(x=length, fill=type))+
+  gg.unique <- ggplot2::ggplot(cleanup, aes(x=length, fill=type))+
     geom_histogram(binwidth = 1) + 
     scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
     theme_bw()+
@@ -1435,7 +1435,7 @@ step_rareplot <- function(ps, min_reads=1000, plot_dir=NULL){
     purrr::set_names(sample_names(ps)) %>%
     dplyr::bind_rows(.id="sample_id")
   
-  gg.rare <- ggplot(data = rare)+
+  gg.rare <- ggplot2::ggplot(data = rare)+
     geom_line(aes(x = count, y = OTU, group=sample_id), alpha=0.5)+
     geom_point(data = rare %>% 
                  dplyr::group_by(sample_id) %>% 
@@ -1596,14 +1596,14 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
 # Export samples
 step_output_summary <- function(ps, out_dir, type="unfiltered"){
   #Export raw csv
-  speedyseq::psmelt(ps) %>%
+  phyloseq::psmelt(ps) %>%
     filter(Abundance > 0) %>%
     dplyr::select(-Sample) %>%
     write_csv(normalizePath(paste0(out_dir,"/raw_", type,".csv")))
   
   # Export species level summary of filtered results
   ps %>%
-    psmelt() %>%
+    phyloseq::psmelt() %>%
     filter(Abundance > 0) %>%
     left_join(refseq(ps) %>% as.character() %>% enframe(name="OTU", value="sequence")) %>%
     dplyr::select(OTU, sequence, rank_names(ps), sample_id, Abundance ) %>%
@@ -1953,8 +1953,8 @@ phyloseq_filter_sample_wise_abund_trim <- function(physeq, minabund = 10, relabu
   
   ## Remove zero-OTUs
   if(rm_zero_OTUs == TRUE){
-    if (any(taxa_sums(res) > 0)){
-      res <- phyloseq::prune_taxa(taxa_sums(res) > 0, res)
+    if (any(phyloseq::taxa_sums(res) > 0)){
+      res <- phyloseq::prune_taxa(phyloseq::taxa_sums(res) > 0, res)
     } else {
       res <- NULL
     }
@@ -1992,7 +1992,7 @@ merge_phyloseq_new <- function (arguments){
     } else {
       x1 <- i.list[[1]]
       for (j in 2:length(i.list)) {
-        x1 <- merge_phyloseq_pair(x1, i.list[[j]])
+        x1 <- phyloseq::merge_phyloseq_pair(x1, i.list[[j]])
       }
       x1 <- list(x1)
       names(x1) <- i
@@ -2012,11 +2012,11 @@ rareplot <- function(ps, step="auto", threshold=0){
     stop("Step must be an integer or 'auto' ")
   }
   ps <- ps %>%
-    prune_samples(sample_sums(.)>0, .) %>% 
-    filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
+    phyloseq::prune_samples(sample_sums(.)>0, .) %>% 
+    phyloseq::filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
   rare <- otu_table(ps) %>%
     as("matrix") %>%
-    rarecurve(step=step) %>% 
+    vegan::rarecurve(step=step) %>% 
     purrr::set_names(sample_names(ps)) %>%
     purrr::map_dfr(., function(x){
       b <- as.data.frame(x)
@@ -2024,14 +2024,14 @@ rareplot <- function(ps, step="auto", threshold=0){
       b$count <- as.numeric(gsub("N", "",  b$count))
       return(b)
     },.id="sample_id") %>%
-    left_join(sample_data(ps)%>%
+    left_join(phyloseq::sample_data(ps)%>%
                 as("matrix") %>%
-                as_tibble() %>%
+                tibble::as_tibble() %>%
                 dplyr::select(sample_id, fcid) %>%
-                distinct())
+                dplyr::distinct())
   
   gg.rare <- rare %>%
-    ggplot() +
+    ggplot2::ggplot() +
     geom_line(aes(x = count, y = OTU, group=sample_id), alpha=0.3)+
     geom_point(data = rare %>% 
                  group_by(sample_id) %>% 

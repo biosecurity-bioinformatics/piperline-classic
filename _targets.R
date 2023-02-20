@@ -5,33 +5,23 @@ options(tidyverse.quiet = TRUE)
 
 # Load packages -----------------------------------------------------------
 tar_option_set(packages = c(
-  "devtools",
   "ggplot2",
   "gridExtra",
-  "data.table",
   "tidyverse", 
-  "stringdist",
+  "magrittr",
   "patchwork",
   "vegan",
-  "seqinr",
   "patchwork",
-  "stringi",
-  "phangorn",
-  "magrittr",
-  "galah",
   "phyloseq",
   "DECIPHER",
   "Biostrings",
   "ShortRead",
-  "ggtree",
   "savR",
   "dada2",
   "ngsReports",
   "taxreturn",
-  "seqateurs",
-  "speedyseq"
+  "seqateurs"
 ), workspace_on_error = TRUE)
-
 
 # Targets pipeline
 list(
