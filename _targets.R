@@ -947,15 +947,17 @@ tar_target(read_tracking, {
   
   # Unfiltered phyloseq
   ps_obj <- readRDS(ps)
-  phyloseq::tax_table(ps_obj) <- phyloseq::tax_table(ps_obj) %>%
-    as("data.frame") %>%
+  phyloseq::tax_table(ps_obj) <- phyloseq::tax_table(ps_obj)  %>%
+    as("matrix") %>% 
+    as.data.frame() %>%
     seqateurs::unclassified_to_na() %>%
     as.matrix()
 
   # filtered phyloseq
   ps_filt_obj <- readRDS(ps_filtered)
-  phyloseq::tax_table(ps_filt_obj) <- phyloseq::tax_table(ps_filt_obj) %>%
-    as("data.frame") %>%
+  phyloseq::tax_table(ps_filt_obj) <- phyloseq::tax_table(ps_filt_obj)%>%
+    as("matrix") %>% 
+    as.data.frame() %>%
     seqateurs::unclassified_to_na() %>%
     as.matrix()
       

@@ -406,7 +406,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   switch_plot_dat <- switched %>%
     dplyr::mutate(index = purrr::map(index, ~{
       index_list <- applied_indices$index
-      index_dist <- stringdist(.x,index_list)
+      index_dist <- stringdist::stringdist(.x,index_list)
       # Remove those above barcode_mismatch threshold
       index_list <- index_list[index_dist <= barcode_mismatch]
       index_dist <- index_dist[index_dist <= barcode_mismatch]
@@ -414,7 +414,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
     })) %>%
     dplyr::mutate(index2 = purrr::map(index2, ~{
       index_list <- applied_indices$index2
-      index_dist <- stringdist(.x,index_list)
+      index_dist <- stringdist::stringdist(.x,index_list)
       # Remove those above barcode_mismatch threshold
       index_list <- index_list[index_dist <= barcode_mismatch]
       index_dist <- index_dist[index_dist <= barcode_mismatch]
@@ -1465,7 +1465,8 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   
   #Taxonomic filtering
   taxtab <- phyloseq::tax_table(ps) %>%
-    as("data.frame")
+    as("matrix") %>% 
+    as.data.frame()
   
   # Filter kingdom
   ps0 <- ps
@@ -1610,7 +1611,7 @@ step_output_summary <- function(ps, out_dir, type="unfiltered"){
     pivot_wider(names_from = sample_id,
                 values_from = Abundance,
                 values_fill = list(Abundance = 0)) %>%
-    write.csv(file = normalizePath(paste0(out_dir,"/",type,"_summary.csv")))
+    write.csv(file = normalizePath(paste0(out_dir,"/summary_", type, ".csv")))
 
   #Output fasta of all ASV's
   seqs <- Biostrings::DNAStringSet(as.vector(phyloseq::refseq(ps)))
