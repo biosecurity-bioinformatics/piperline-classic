@@ -653,23 +653,6 @@
       "Hash": "50c838a310445e954bc13f26f26a6ecf",
       "Requirements": []
     },
-    "atom4R": {
-      "Package": "atom4R",
-      "Version": "0.3-3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "8111c34df3f1e550e1f0e9aa043a0b79",
-      "Requirements": [
-        "R6",
-        "XML",
-        "httr",
-        "jsonlite",
-        "keyring",
-        "rdflib",
-        "readr",
-        "zip"
-      ]
-    },
     "backports": {
       "Package": "backports",
       "Version": "1.4.1",
@@ -773,14 +756,6 @@
         "tibble",
         "xml2"
       ]
-    },
-    "brew": {
-      "Package": "brew",
-      "Version": "1.0-7",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "38875ea52350ff4b4c03849fc69736c8",
-      "Requirements": []
     },
     "broom": {
       "Package": "broom",
@@ -1107,18 +1082,6 @@
       "Hash": "65a3d4e2a1619bb85ae0fb64628da972",
       "Requirements": []
     },
-    "desc": {
-      "Package": "desc",
-      "Version": "1.4.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "eebd27ee58fcc58714eedb7aa07d8ad1",
-      "Requirements": [
-        "R6",
-        "cli",
-        "rprojroot"
-      ]
-    },
     "digest": {
       "Package": "digest",
       "Version": "0.6.29",
@@ -1231,14 +1194,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "dabc225759a2c2b241e60e42bf0e8e54",
-      "Requirements": []
-    },
-    "filelock": {
-      "Package": "filelock",
-      "Version": "1.0.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "38ec653c2613bed60052ba3787bd8a2c",
       "Requirements": []
     },
     "fontawesome": {
@@ -1741,18 +1696,6 @@
         "htmltools"
       ]
     },
-    "jsonld": {
-      "Package": "jsonld",
-      "Version": "2.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "173b7fe6d4c05b04aef7d350bc72ffeb",
-      "Requirements": [
-        "V8",
-        "curl",
-        "jsonlite"
-      ]
-    },
     "jsonlite": {
       "Package": "jsonlite",
       "Version": "1.8.0",
@@ -1792,23 +1735,6 @@
         "viridisLite",
         "webshot",
         "xml2"
-      ]
-    },
-    "keyring": {
-      "Package": "keyring",
-      "Version": "1.3.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "b7880ebefe188d62b099673bbc04afac",
-      "Requirements": [
-        "R6",
-        "askpass",
-        "assertthat",
-        "filelock",
-        "openssl",
-        "rappdirs",
-        "sodium",
-        "yaml"
       ]
     },
     "kmer": {
@@ -2300,23 +2226,6 @@
       "Hash": "01f28d4278f15c76cddbea05899c5d6f",
       "Requirements": []
     },
-    "pkgload": {
-      "Package": "pkgload",
-      "Version": "1.3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "4b20f937a363c78a5730265c1925f54a",
-      "Requirements": [
-        "cli",
-        "crayon",
-        "desc",
-        "fs",
-        "glue",
-        "rlang",
-        "rprojroot",
-        "withr"
-      ]
-    },
     "plogr": {
       "Package": "plogr",
       "Version": "0.2.0",
@@ -2472,21 +2381,6 @@
         "assertthat"
       ]
     },
-    "rdflib": {
-      "Package": "rdflib",
-      "Version": "0.2.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "9b2a0bbd7d9df12211cadb02d8055456",
-      "Requirements": [
-        "dplyr",
-        "jsonld",
-        "readr",
-        "redland",
-        "stringi",
-        "tidyr"
-      ]
-    },
     "readr": {
       "Package": "readr",
       "Version": "2.1.2",
@@ -2518,16 +2412,6 @@
         "cpp11",
         "progress",
         "tibble"
-      ]
-    },
-    "redland": {
-      "Package": "redland",
-      "Version": "1.0.17-16",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "a8fabfd50f12a62b36a78e49129c0681",
-      "Requirements": [
-        "roxygen2"
       ]
     },
     "rematch": {
@@ -2713,44 +2597,12 @@
         "rncl"
       ]
     },
-    "roxygen2": {
-      "Package": "roxygen2",
-      "Version": "7.2.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "da1f278262e563c835345872f2fef537",
-      "Requirements": [
-        "R6",
-        "brew",
-        "cli",
-        "commonmark",
-        "cpp11",
-        "desc",
-        "digest",
-        "knitr",
-        "pkgload",
-        "purrr",
-        "rlang",
-        "stringi",
-        "stringr",
-        "withr",
-        "xml2"
-      ]
-    },
     "rpart": {
       "Package": "rpart",
       "Version": "4.1.16",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "ea3ca1d9473daabb3cd0f1b4f974c1ed",
-      "Requirements": []
-    },
-    "rprojroot": {
-      "Package": "rprojroot",
-      "Version": "2.0.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "1de7ab598047a87bba48434ba35d497d",
       "Requirements": []
     },
     "rredlist": {
@@ -2965,14 +2817,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "40b74690debd20c57d93d8c246b305d4",
-      "Requirements": []
-    },
-    "sodium": {
-      "Package": "sodium",
-      "Version": "1.2.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "3606bb09e0914edd4fc8313b500dcd5e",
       "Requirements": []
     },
     "solrium": {
@@ -3510,30 +3354,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "458bb38374d73bf83b1bb85e353da200",
-      "Requirements": []
-    },
-    "zen4R": {
-      "Package": "zen4R",
-      "Version": "0.8",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "e6d517e3f281b9b0f81e8a919dbe9bc8",
-      "Requirements": [
-        "R6",
-        "XML",
-        "atom4R",
-        "httr",
-        "jsonlite",
-        "keyring",
-        "xml2"
-      ]
-    },
-    "zip": {
-      "Package": "zip",
-      "Version": "2.2.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "c7eef2996ac270a18c2715c997a727c5",
       "Requirements": []
     },
     "zlibbioc": {

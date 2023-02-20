@@ -25,7 +25,6 @@ editor_options:
 library(knitr)
 library(targets)
 library(tarchetypes)
-library(zen4R)
 
 knitr::opts_chunk$set(echo = TRUE, eval=FALSE, message=FALSE,error=FALSE, fig.show = "hold", fig.keep = "all")
 opts_chunk$set(dev = 'png')
@@ -124,9 +123,8 @@ done
 Example tephritid metabarcoding reads have been hosted on [Zenodo](https://zenodo.org/record/7112162#.Y_LoBXZBz-g), either download them manually or with R below: 
 
 ```{r}
-# Install and load the zen4R package
-install.packages("zen4R")
-library(zen4R)
+# Source the functions file which contains code to download from zenodo
+source("R/functions.R")
 
 # Create directory for data
 if(!dir.exists("data/K77JP")) {dir.create("data/K77JP", recursive = TRUE)}
@@ -173,9 +171,8 @@ The pipeRline workflow uses the [IDTAXA](https://microbiomejournal.biomedcentral
 Reference databases for insects and arachnids have been hosted on [Zenodo](https://zenodo.org/record/7655352#.Y_LgsHZBz-g), either download them manually, or with R below:
 
 ```{r}
-# Install and load the zen4R package
-install.packages("zen4R")
-library(zen4R)
+# Source the functions file which contains code to download from zenodo
+source("R/functions.R")
 
 # Download files from zenodo
 download_zenodo(

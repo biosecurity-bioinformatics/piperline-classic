@@ -103,6 +103,9 @@ if(!dir.exists("output/results/filtered")) {dir.create("output/results/filtered"
 Some test sequencing reads have been hosted on Zenodo for this workshop. The below code will download these and put them inside the data folder.
 
 ```{r}
+# Source the functions file which contains code to download from zenodo
+source("R/functions.R")
+
 # Create directory for data
 if(!dir.exists("data/K77JP")) {dir.create("data/K77JP", recursive = TRUE)}
 if(!dir.exists("data/K77JP/InterOp")) {dir.create("data/K77JP/InterOp", recursive = TRUE)}

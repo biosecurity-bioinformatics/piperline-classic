@@ -1916,6 +1916,50 @@ parse_seqrun <- function(SampleSheet, runParameters){
   return(combined)
 }
 
+download_zenodo <- function(doi, path = ".", quiet = FALSE) {
+  
+  assertthat::assert_that(is.string(doi), is.string(path))
+  assertthat::assert_that(is.flag(parallel), noNA(parallel), is.flag(quiet), noNA(quiet))
+  
+  # check for existence of the folder
+  if(!dir.exists(path)){
+    dir.create(path)
+  }
+  
+  record <- str_remove(doi, fixed("10.5281/zenodo."))
+  
+  # Retrieve file name by records call
+  base_url <- 'https://zenodo.org/api/records/'
+  req <- curl::curl_fetch_memory(paste0(base_url, record))
+  content <- jsonlite::fromJSON(rawToChar(req$content))
+  
+  # extract individual file names and urls
+  file_urls <- content$files$links$self
+  
+  # extract check-sum(s)
+  file_md5 <- content$files$checksum
+  
+  # Download files
+  for (i in seq_along(file_urls)) {
+    file_url <- file_urls[i]
+    filename <- str_match(file_url, ".+/([^/]+)")[,2]
+    destfile <- file.path(path, filename)
+    
+    # download file
+    curl::curl_download(file_url, destfile, quiet=quiet)
+    
+    # Check file integrity
+    md5 <- unname(tools::md5sum(destfile))
+    zenodo_md5 <- str_split(file_md5[i], ":")[[1]][2]
+    if (all.equal(md5, zenodo_md5)) {
+      if (!quiet) message(filename," was downloaded and its integrity verified (md5sum: ", md5,")")
+    } else {
+      warning("Incorrect download! md5sum ", md5, " for file", filename, " does not match the Zenodo archived md5sum ", zenodo_md5)
+    }
+    
+  }
+}
+
 # Phyloseq utilities ------------------------------------------------------
 
 
