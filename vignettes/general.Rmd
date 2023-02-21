@@ -118,6 +118,27 @@ done
 ```
 
 
+# Optional: Run R on BASC
+
+You may wish to run this workflow through the command line on Agriculture Victorias BASC server in order to take advantage of more processing power. To do this, you can start a new SLURM interactive session. Press the CODE button to the lower right to display the code for this optional step.
+
+```{bash, class.source = 'fold-hide'}
+# Create new interactive SLURM session
+sinteractive --ntasks=1 --cpus-per-task=10 --mem-per-cpu=10GB --time=72:00:00
+
+module load R/4.2.0-foss-2021b
+module load pkgconfig/1.5.1-GCCcore-9.3.0-Python-3.8.2
+module load GDAL/3.3.0-foss-2021a
+module load BLAST+/2.11.0-gompi-2020a
+module load Pandoc/2.5
+module load ZeroMQ/4.3.2-GCCcore-9.3.0
+
+# Load R
+R
+```
+
+
+
 ## Download example reads
 
 Example tephritid metabarcoding reads have been hosted on [Zenodo](https://zenodo.org/record/7112162#.Y_LoBXZBz-g), either download them manually or with R below: 

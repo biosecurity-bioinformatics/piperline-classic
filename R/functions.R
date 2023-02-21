@@ -1917,10 +1917,7 @@ parse_seqrun <- function(SampleSheet, runParameters){
 }
 
 download_zenodo <- function(doi, path = ".", quiet = FALSE) {
-  
-  assertthat::assert_that(is.string(doi), is.string(path))
-  assertthat::assert_that(is.flag(parallel), noNA(parallel), is.flag(quiet), noNA(quiet))
-  
+
   # check for existence of the folder
   if(!dir.exists(path)){
     dir.create(path)
