@@ -57,6 +57,7 @@ To update to the latest version of the pipeline, run the below code in the termi
 git pull
 ```
 
+
 # Prior to analysis
 The PipeRline workflow assumes that your sequencing data meets certain criteria:
 
@@ -73,11 +74,9 @@ For example:
          
 You will also need BLAST+ installed on your computer, it can be downloaded from the [NCBI website](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download) 
 
-# Sequencing reads {.tabset}
+# Sequencing reads 
 
 For this workflow to run, we will need some sequencing runs to work with. If you are working with MiSeq data, it is recommended that the data is demultiplexed again using bcl2fastq (see **Demultiplex MiSeq run** tab below), as the miseq does not put indexes in fasta headers by default which is required for the index swtiching calculation.
-
-If you do not yet have any data, some test sequencing reads have been hosted on Zenodo for testing purposes. The below code in the **Download example reads** tab below will download these and put them inside the data folder.
 
 ## Demultiplex MiSeq run
 The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
@@ -125,55 +124,7 @@ done
 
 ```
 
-
-# Optional: Run R on BASC
-
-You may wish to run this workflow through the command line on Agriculture Victorias BASC server in order to take advantage of more processing power. To do this, you can start a new SLURM interactive session. Press the CODE button to the lower right to display the code for this optional step.
-
-```{bash, class.source = 'fold-hide'}
-# Create new interactive SLURM session
-sinteractive --ntasks=1 --cpus-per-task=10 --mem-per-cpu=10GB --time=72:00:00
-
-module load R/4.2.0-foss-2021b
-module load pkgconfig/1.5.1-GCCcore-9.3.0-Python-3.8.2
-module load GDAL/3.3.0-foss-2021a
-module load BLAST+/2.11.0-gompi-2020a
-module load Pandoc/2.5
-module load ZeroMQ/4.3.2-GCCcore-9.3.0
-
-# Load R
-R
-```
-
-
-
-## Download example reads
-
-Example tephritid metabarcoding reads have been hosted on [Zenodo](https://zenodo.org/record/7112162#.Y_LoBXZBz-g), either download them manually or with R below: 
-
-```{r}
-# Source the functions file which contains code to download from zenodo
-source("R/functions.R")
-
-# Create directory for data
-if(!dir.exists("data/K77JP")) {dir.create("data/K77JP", recursive = TRUE)}
-if(!dir.exists("data/K77JP/InterOp")) {dir.create("data/K77JP/InterOp", recursive = TRUE)}
-
-# Download files from zenodo
-download_zenodo(
-  doi = "10.5281/zenodo.7112162",
-  path = "data/K77JP"
-)
-
-# Move the interop files to the interop folder
-fs::dir_ls(path="data/K77JP", glob="*.bin") %>%
-  purrr::map(function(x){
-    fs::file_copy(path = x, new_path = x %>% str_replace("data/K77JP", "data/K77JP/InterOp"))
-    file.remove(x)
-  })
-```
-
-# Install and load R packages and setup directories {-}
+# Install and load R packages and setup directories
 
 This pipeline depends on a number of other R packages which this step will install. The versions of these packages are managed using [renv](https://rstudio.github.io/renv/articles/renv.html) to ensure they match the versions the pipeline was developed on. The first time installing packages may take some time, but they should be quick to load for any future runs. 
 
@@ -191,7 +142,7 @@ source("R/functions.R")
 source("R/themes.R")
 ```
 
-# Reference databases {.tabset}
+# Reference databases 
 
 The pipeRline workflow uses the [IDTAXA](https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-018-0521-5) and BLAST software to assign taxonomy to the sequence reads. These require a pre-trained IDTAXA model, and a fasta file with heirarchial taxonomy. For insects, these 
 
@@ -200,9 +151,6 @@ The pipeRline workflow uses the [IDTAXA](https://microbiomejournal.biomedcentral
 Reference databases for insects and arachnids have been hosted on [Zenodo](https://zenodo.org/record/7655352#.Y_LgsHZBz-g), either download them manually, or with R below:
 
 ```{r}
-# Source the functions file which contains code to download from zenodo
-source("R/functions.R")
-
 # Download files from zenodo
 download_zenodo(
   doi = "10.5281/zenodo.7655352",
@@ -210,20 +158,8 @@ download_zenodo(
 )
 ```
 
-## Create your own reference database
 
-If you need a new database, these can be created from genbank and blast using [taxreturn](https://github.com/alexpiper/taxreturn) or other simialr database curation packages.  
-
-```{code}
->Accession|Root;Kingdom;Phylum;Class;Order;Family;Genus;Species
-ACCTAGAAAGTCGTAGATCGAAGTTGAAGCATCGCCCGATGATCGTCTGAAGCTGTAGCATGAGTCGATTTTCACATTCAGGGATACCATAGGATAC
->Root;Kingdom;Phylum;Class;Order;Family;Genus;Species
-CGCTAGAAAGTCGTAGAAGGCTCGGAGGTTTGAAGCATCGCCCGATGGGATCTCGTTGCTGTAGCATGAGTACGGACATTCAGGGATCATAGGATAC
-```
-
-The IDTAXA model can then be trained on this reference fasta - See the [IDTAXA manual](http://www2.decipher.codes/Documentation/Documentation-ClassifySequences.html)
-
-# Create sample tracking sheet {-}
+# Create sample tracking sheet  
 
 In order to track samples and relevant QC statistics throughout the metabarcoding pipeline, we will first create a new sample tracking sheet from our input illumina samplesheets. This function requires both the SampleSheet.csv used for the sequencing run, and the runParameters.xml, both of which should have been automatically obtained from the demultiplexed sequencing run folder in the bash step above
 
@@ -269,7 +205,7 @@ if (length(setdiff(samdf$sample_id, fastqFs)) > 0) {
 write_csv(samdf, "sample_data/Sample_info.csv")
 ```
 
-# Add PCR primers to sample sheet {.tabset}
+# Add PCR primers to sample sheet 
 
 This can either be done manually by editing the sample_data/Sample_info.csv file, or it can be done in R as below.
 
@@ -292,43 +228,7 @@ samdf <- samdf %>%
 write_csv(samdf, "sample_data/Sample_info.csv")
 ```
 
-## Different primer sets per sample
-
-```{R}
-# Add PCR primers to sample sheet
-samdf <- samdf %>%
-  mutate(pcr_primers = case_when(
-    str_detect(sample_name, "primer1") ~ "fwhF2-fwhR2n",
-    str_detect(sample_name, "primer2") ~ "EIF3LminiF4-EIF3lminiR4"
-  ),
-  for_primer_seq = case_when(
-    str_detect(sample_name, "primer1") ~ "GGDACWGGWTGAACWGTWTAYCCHCC",
-    str_detect(sample_name, "primer2") ~ "GATGCGYCGTTATGCYGATGC"
-  ),
-  rev_primer_seq = case_when(
-    str_detect(sample_name, "primer1") ~ "GTRATWGCHCCDGCTARWACWGG",
-    str_detect(sample_name, "primer2") ~ "TTRAAYACTTCYARATCRCC"
-  ))
-
-write_csv(samdf, "sample_data/Sample_info.csv")
-```
-
-## Multiple primer sets per sample
-
-```{R}
-# Add PCR primers to sample sheet
-samdf <- samdf %>%
-  mutate(
-    pcr_primers = "fwhF2-fwhR2nDac;EIF3LminiF4-EIF3lminiR4",
-    for_primer_seq = "GGDACWGGWTGAACWGTWTAYCCHCC;GATGCGYCGTTATGCYGATGC",
-    rev_primer_seq = "GTRATWGCHCCIGCTAADACHGG;TTRAAYACTTCYARATCRCC"
-    )
-
-write_csv(samdf, "sample_data/Sample_info.csv")
-```
-
-
-# Create parameters file {.tabset}
+# Create parameters file 
 
 The parameters file table the respective target gene, reference databases, and filtering parameters for each primer set used to amplify the samples. As the pcr_primers column is used in the pipeline to match the parameters to the respective sample, it is critical that the primer names match those set in the previous step.
 
@@ -427,104 +327,7 @@ params <- tibble(
 write_csv(params, "sample_data/loci_params.csv")
 ```
 
-## Different or multiple primer sets per sample
-
-```{R}
-# Params to add in step_add_parameters
-params <- tibble(
-  # Primer parameters
-  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
-  target_gene=c("COI", "EIF3L"),
-  max_primer_mismatch=1,
-
-  # Read filtering
-  read_min_length = 20,
-  read_max_length = Inf,
-  read_max_ee = 1,
-  read_trunc_length = 150,
-  read_trim_left = 0,
-  read_trim_right = 0,
-  
-  # ASV filtering
-  asv_min_length = c(195, 207),
-  asv_max_length = c(215, 227),
-  genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE),
-  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
-  
-  # Taxonomic assignment
-  idtaxa_db = c("reference/COI_idtaxa.rds","reference/EIF3L_idtaxa.rds"),
-  ref_fasta = c("reference/COI_hierarchial.fa.gz", "reference/EIF3L_hierarchial.fa.gz"),
-  idtaxa_confidence = 60,
-  run_blast=TRUE,
-  blast_min_identity = 97,
-  target_kingdom = c("Metazoa", "Metazoa"),
-  target_phylum = c("Arthropoda","Arthropoda"),
-  target_class = NA,
-  target_order = NA,
-  target_family = NA, 
-  target_genus = NA,  
-  target_species= NA,  
-  
-  # Sample & Taxon filtering
-  min_sample_reads = c(1000, 1000),
-  min_taxa_reads= NA, 
-  min_taxa_ra = c(1e-4, 1e-4),
-)
-
-write_csv(params, "sample_data/loci_params.csv")
-```
-
-## Multiple reference databases
-
-```{r}
-params <- tibble(
-  # Primer parameters
-  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
-  target_gene=c("COI", "EIF3L"),
-  max_primer_mismatch=0,
-
-  # Read filtering
-  read_min_length = 20,
-  read_max_length = Inf,
-  read_max_ee = 1,
-  read_trunc_length = 150,
-  read_trim_left = 0,
-  read_trim_right = 0,
-  
-  # ASV filtering
-  asv_min_length = c(195, 207),
-  asv_max_length = c(215, 227),
-  genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE),
-  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
-  
-  # Taxonomic assignment
-  idtaxa_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds",
-             "reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
-  ref_fasta = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz",
-               "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
-  idtaxa_confidence = 60,
-  run_blast=TRUE,
-  blast_min_identity = 97,
-  target_kingdom = c("Metazoa", "Metazoa"),
-  target_phylum = c("Arthropoda","Arthropoda"),
-  target_class = NA,
-  target_order = NA,
-  target_family = NA, 
-  target_genus = NA,  
-  target_species= NA,  
-  
-  # Sample & Taxon filtering
-  min_sample_reads = c(1000, 1000),
-  min_taxa_reads= NA,
-  min_taxa_ra = c(1e-4, 1e-4),
-)
-
-write_csv(params, "sample_data/loci_params.csv")
-```
-
-# Run pipeline {-}
+# Run pipeline
 Now that the sample data sheet and parameters are defined, the pipeline steps can now be run automatically using the tar_make() command
 
 ```{r}
