@@ -166,7 +166,7 @@ list(
     out <- "output/temp/params_database.csv"
     params %>% 
       dplyr::select(pcr_primers, target_gene, idtaxa_db, idtaxa_confidence, 
-                    ref_fasta, blast_min_identity, run_blast) %>%
+                    ref_fasta, blast_min_identity, blast_min_coverage, run_blast) %>%
       write_csv(out)
     return(out)
   }),
@@ -625,7 +625,7 @@ tar_target(idtaxa_path, {
              dplyr::select(-one_of("target_gene", "ref_fasta"))%>%
              dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, ref_fasta, blast_min_identity, blast_min_coverage, run_blast)) %>%
              tidyr::separate_rows(ref_fasta, sep=";") %>%
-             dplyr::group_by(target_gene, pcr_primers, blast_min_identity,ref_fasta, run_blast) %>%
+             dplyr::group_by(target_gene, pcr_primers, blast_min_identity, blast_min_coverage, ref_fasta, run_blast) %>%
              tidyr::nest()  %>% 
              dplyr::mutate(ref_fasta2 = purrr::map(ref_fasta, ~{
                ref_fasta_tracked[stringr::str_detect(ref_fasta_tracked, .x)]
