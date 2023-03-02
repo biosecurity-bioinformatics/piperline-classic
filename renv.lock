@@ -8,9 +8,6 @@
       }
     ]
   },
-  "Bioconductor": {
-    "Version": "3.15"
-  },
   "Packages": {
     "BH": {
       "Package": "BH",
@@ -67,17 +64,6 @@
         "futile.logger",
         "snow"
       ]
-    },
-    "BiocVersion": {
-      "Package": "BiocVersion",
-      "Version": "3.15.2",
-      "Source": "Bioconductor",
-      "git_url": "https://git.bioconductor.org/packages/BiocVersion",
-      "git_branch": "master",
-      "git_last_commit": "818ab03",
-      "git_last_commit_date": "2022-03-29",
-      "Hash": "48e545a2fa24a967de72b1114bfe96ac",
-      "Requirements": []
     },
     "Biostrings": {
       "Package": "Biostrings",
@@ -2444,10 +2430,10 @@
     },
     "renv": {
       "Package": "renv",
-      "Version": "0.15.5",
+      "Version": "0.16.0",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "6a38294e7d12f5d8e656b08c5bd8ae34",
+      "Hash": "c9e8442ab69bc21c9697ecf856c1e6c7",
       "Requirements": []
     },
     "reprex": {
@@ -2902,10 +2888,10 @@
     },
     "sys": {
       "Package": "sys",
-      "Version": "3.4",
+      "Version": "3.4.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "b227d13e29222b4574486cfcbde077fa",
+      "Hash": "34c16f1ef796057bfa06d3f4ff818a5d",
       "Requirements": []
     },
     "systemfonts": {
@@ -2998,8 +2984,8 @@
       "RemoteRepo": "taxreturn",
       "RemoteUsername": "alexpiper",
       "RemoteRef": "HEAD",
-      "RemoteSha": "741fbc3978c30511ee15c2b56c65ee4371a49cb3",
-      "Hash": "6400e27c966fcf17afec4117fec8e37d",
+      "RemoteSha": "29958187b3d5ac5ce2e5fc05d56b70a787c8cad6",
+      "Hash": "6365a99f19aa4a85e0337d05a313cff6",
       "Requirements": [
         "BiocManager",
         "Biostrings",
