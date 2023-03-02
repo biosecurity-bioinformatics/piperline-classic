@@ -366,6 +366,7 @@ If multiple primer reference databases are to be used for each sample, these can
     + **idtaxa_confidence** - Minimum bootstrap confidence for IDTAXA
     + **run_blast** - Whether a blast top hit search should be conducted in addition to IDTAXA
     + **blast_min_identity** - Minimum nucleotide identity for BLAST
+    + **blast_min_coverage** - Minumum query coverage for BLAST
     + **target_kingdom** - Subset to target kingdom
     + **target_phylum** - Subset to target phylum
     + **target_class** - Subset to target class
@@ -410,6 +411,7 @@ params <- tibble(
   idtaxa_confidence = 60,
   run_blast=TRUE,
   blast_min_identity = 97,
+  blast_min_coverage = 90,
   target_kingdom = "Metazoa",
   target_phylum = "Arthropoda",
   target_class = NA,
@@ -458,6 +460,7 @@ params <- tibble(
   idtaxa_confidence = 60,
   run_blast=TRUE,
   blast_min_identity = 97,
+  blast_min_coverage = 90,
   target_kingdom = c("Metazoa", "Metazoa"),
   target_phylum = c("Arthropoda","Arthropoda"),
   target_class = NA,
@@ -507,6 +510,7 @@ params <- tibble(
   idtaxa_confidence = 60,
   run_blast=TRUE,
   blast_min_identity = 97,
+  blast_min_coverage = 90,
   target_kingdom = c("Metazoa", "Metazoa"),
   target_phylum = c("Arthropoda","Arthropoda"),
   target_class = NA,

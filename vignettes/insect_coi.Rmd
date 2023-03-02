@@ -1,6 +1,6 @@
 ---
 title: "PipeRline"
-subtitle: "General example"
+subtitle: "Insect COI example"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
@@ -34,7 +34,7 @@ opts_chunk$set(dev = 'png')
 
 This metabarcoding pipeline is based around the [targets](https://books.ropensci.org/targets/) package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
 
-This page lists the general workflow and all the options that can be adapted for your dataset.
+This page lists an example pipeline for insect COI sequencing.
 
 # Clone the pipeRline github repository
 
@@ -74,11 +74,10 @@ For example:
          
 You will also need BLAST+ installed on your computer, it can be downloaded from the [NCBI website](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download) 
 
-# Sequencing reads 
+# Demultiplex MiSeq run
 
-For this workflow to run, we will need some sequencing runs to work with. If you are working with MiSeq data, it is recommended that the data is demultiplexed again using bcl2fastq (see **Demultiplex MiSeq run** tab below), as the miseq does not put indexes in fasta headers by default which is required for the index swtiching calculation.
+For this workflow to run, we will need some sequencing runs to work with. If you are working with MiSeq data, it is recommended that the data is demultiplexed again using bcl2fastq, as the miseq does not put indexes in fasta headers by default which is required for the index swtiching calculation.
 
-## Demultiplex MiSeq run
 The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
 
 ```{bash demultiplex 1 mismatch}
@@ -209,13 +208,7 @@ write_csv(samdf, "sample_data/Sample_info.csv")
 
 This can either be done manually by editing the sample_data/Sample_info.csv file, or it can be done in R as below.
 
-If a single primer set was used across all samples, these can simply be added using a mutate call (**tab 1**).
-
-If different primers were used for different samples, these can be set using pattern matching on the sample names with case_when (**tab 2**).
-
-If multiple primer sets are used per sample, before indexing, the pipeline will conduct an extra round of demultiplexing to split each sample by primer. This option can be set by splitting each primer set with a semicolon (**tab 3**) 
-
-## Single primer set
+For this workflow a single primer set was used across all samples. For multiple primers see the options in the [General introduction to the pipeRline workflow](https://alexpiper.github.io/piperline/vignettes/general.html)
 
 ```{R}
 # Add primers to sample sheet
@@ -232,11 +225,7 @@ write_csv(samdf, "sample_data/Sample_info.csv")
 
 The parameters file table the respective target gene, reference databases, and filtering parameters for each primer set used to amplify the samples. As the pcr_primers column is used in the pipeline to match the parameters to the respective sample, it is critical that the primer names match those set in the previous step.
 
-If a single primer set was used across all samples, these can simply be added to the table as below (**tab 1**).
-
-If different primers were used for different samples, these can be set as different rows in the table using c() when creatign the tibble (**tab 2**).
-
-If multiple primer reference databases are to be used for each sample, these can be set by splitting each a semicolon. The taxonomic assignment will be conducted sequentially through the databases from left to right, with the second reference database only being used for those ASVs that couldnt be assigned to species level using the first databases (**tab 3**) 
+For this workflow a single primer set was used across all samples. For multiple primers see the options in the [General introduction to the pipeRline workflow](https://alexpiper.github.io/piperline/vignettes/general.html)
 
 **Parameter options**
 
@@ -266,6 +255,7 @@ If multiple primer reference databases are to be used for each sample, these can
     + **idtaxa_confidence** - Minimum bootstrap confidence for IDTAXA
     + **run_blast** - Whether a blast top hit search should be conducted in addition to IDTAXA
     + **blast_min_identity** - Minimum nucleotide identity for BLAST
+    + **blast_min_coverage** - Minumum query coverage for BLAST
     + **target_kingdom** - Subset to target kingdom
     + **target_phylum** - Subset to target phylum
     + **target_class** - Subset to target class
@@ -278,8 +268,6 @@ If multiple primer reference databases are to be used for each sample, these can
     + **min_sample_reads** - Minimum reads per sample after filtering
     + **min_taxa_reads** - Minimum reads per ASV to retain
     + **min_taxa_ra** - Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
-
-## Single primer set
 
 ```{R}
 # Params to add in step_add_parameters
@@ -310,6 +298,7 @@ params <- tibble(
   idtaxa_confidence = 60,
   run_blast=TRUE,
   blast_min_identity = 97,
+  blast_min_coverage = 90,
   target_kingdom = "Metazoa",
   target_phylum = "Arthropoda",
   target_class = NA,
