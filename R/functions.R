@@ -869,7 +869,7 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
 
 
 step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE, pool="pseudo",
-                       write_all =FALSE, quiet=FALSE){
+                       write_all = FALSE, quiet=FALSE, concat_unmerged=FALSE){
   
   input_dir <- normalizePath(input_dir)
   output <- normalizePath(output)
@@ -879,10 +879,10 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
   
   # Learn error rates from a subset of the samples and reads (rather than running self-consist with full dataset)
-  errF <- learnErrors(filtFs, multithread = multithread, nbases = nbases,
-                      randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
-  errR <- learnErrors(filtRs, multithread = multithread, nbases = nbases,
-                      randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
+  errF <-  dada2::learnErrors(filtFs, multithread = multithread, nbases = nbases,
+                              randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
+  errR <-  dada2::learnErrors(filtRs, multithread = multithread, nbases = nbases,
+                              randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
   
   #write out errors for diagnostics
   if(write_all){
@@ -893,20 +893,78 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   }
   
   ##output error plots to see how well the algorithm modelled the errors in the different runs
-  p1 <- plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
-  p2 <- plotErrors(errR, nominalQ = TRUE) + ggtitle(paste0(fcid, " Reverse Reads"))
+  p1 <-  dada2::plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
+  p2 <-  dada2::plotErrors(errR, nominalQ = TRUE) + ggtitle(paste0(fcid, " Reverse Reads"))
   pdf(paste0(qc_dir,"/",fcid,"_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
   plot(p1)
   plot(p2)
   try(dev.off(), silent=TRUE)
   
-  #Error inference and merger of reads
-  dadaFs <- dada(filtFs, err = errF, multithread = multithread, pool = pool, verbose = TRUE)
-  dadaRs <- dada(filtRs, err = errR, multithread = multithread, pool = pool, verbose = TRUE)
+  #Denoise reads
+  dadaFs <- dada2::dada(filtFs, err = errF, multithread = multithread, pool = pool, verbose = TRUE)
+  dadaRs <- dada2::dada(filtRs, err = errR, multithread = multithread, pool = pool, verbose = TRUE)
   
-  # merge reads
-  mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE) 
-  #mergers <- mergers[sapply(mergers, nrow) > 0] # This was edited to retain empty samples!
+  # Merge reads
+  if(write_all | concat_unmerged){
+    mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE, returnRejects=TRUE) 
+  } else {
+    mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE) 
+  }
+  
+  # Write out unmerged reads
+  if(write_all){
+    unmergedFs <- lapply(1:length(mergers), function(x) {
+      if(any(!mergers[[x]]$accept)){
+        tmp <- dadaFs[[x]]$sequence[mergers[[x]]$forward[!mergers[[x]]$accept]]
+        names(tmp) <- paste0(x, "_", which(!mergers[[x]]$accept), "/1")
+        return(tmp)
+      } else {
+        return(NULL)
+      }
+    }
+    )
+    unmergedRs <- lapply(1:length(mergers), function(x) {
+      if(any(!mergers[[x]]$accept)){
+        tmp <- dadaRs[[x]]$sequence[mergers[[x]]$reverse[!mergers[[x]]$accept]]
+        names(tmp) <- paste0(x, "_", which(!mergers[[x]]$accept), "/2")
+        return(tmp)
+      } else {
+        return(NULL)
+      }
+    }
+    )
+    # Write out fasta of concatenated reads
+    unmerged_fasta <- paste0(unlist(unmergedFs), "NNNNNNNNNN", dada2::rc(unlist(unmergedRs)))
+    names(unmerged_fasta) <- unlist(sapply(unmergedFs, names)) %>% stringr::str_remove("/.*$")
+    taxreturn::write_fasta(taxreturn::char2DNAbin(unmerged_fasta), file = paste0(qc_dir, "/", fcid, "_unmerged_asvs.fa"))
+  }
+  
+  # concatenate unmerged reads
+  #Modified from https://github.com/benjjneb/dada2/issues/565
+  if(concat_unmerged){
+    mergers_rescued <- mergers
+    for(i in 1:length(mergers)) {
+      if(any(!mergers[[i]]$accept)){
+        # Get index of unmerged reads in table
+        unmerged_index <- which(!mergers[[i]]$accept)
+        # Get the forward and reverse reads for those reads
+        unmerged_fwd <- dadaFs[[i]]$sequence[mergers[[i]]$forward[unmerged_index]]
+        unmerged_rev <- dadaRs[[i]]$sequence[mergers[[i]]$reverse[unmerged_index]]
+        
+        unmerged_concat <- paste0(unmerged_fwd, "NNNNNNNNNN", rc(unmerged_rev))
+        
+        mergers_rescued[[i]]$sequence[unmerged_index] <- unmerged_concat
+        mergers_rescued[[i]]$nmatch[unmerged_index] <- 0
+        mergers_rescued[[i]]$nmismatch[unmerged_index] <- 0
+        mergers_rescued[[i]]$nindel[unmerged_index] <- 0
+        mergers_rescued[[i]]$prefer[unmerged_index] <- NA
+        mergers_rescued[[i]]$accept[unmerged_index] <- TRUE
+      } 
+      
+    }
+    mergers <- mergers_rescued
+  }
+  
   if(write_all){
     dplyr::bind_rows(mergers, .id="Sample") %>%
       dplyr::mutate(Sample = stringr::str_remoce(Sample, pattern="_S[0-9]+_R[1-2]_.*$")) %>%
@@ -915,7 +973,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   
   #Construct sequence table
   sample_names <- basename(filtFs) %>% stringr::str_remove("_S[0-9]+_R[1-2]_.*$")
-  seqtab <- makeSequenceTable(mergers)
+  seqtab <- makeSequenceTable(mergers_rescued)
   saveRDS(seqtab, output)
   
   # Track reads
@@ -1201,19 +1259,23 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
       # Transform into taxtab format
       out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
         dplyr::left_join(blast_spp %>%
-          dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
+                           dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
         )%>%
         column_to_rownames("OTU") %>%
         as.matrix()
     } else{
       warning(paste0("No Species assigned with BLAST to ", database, " have you used the correct database?"))
       out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
-        dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
+        dplyr::mutate(Genus = NA_character_, Species = NA_character_) %>%
+        column_to_rownames("OTU") %>%
+        as.matrix()
     }
   } else {
     warning(paste0("No sequences present in seqtab - BLAST skipped"))
     out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
-      dplyr::mutate(Genus = NA_character_, Species = NA_character_) 
+      dplyr::mutate(Genus = NA_character_, Species = NA_character_) %>%
+      column_to_rownames("OTU") %>%
+      as.matrix()
   }
   
   # Check that output dimensions match input

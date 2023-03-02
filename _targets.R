@@ -8,6 +8,7 @@ tar_option_set(packages = c(
   "ggplot2",
   "gridExtra",
   "tidyverse", 
+  "rlang",
   "magrittr",
   "patchwork",
   "vegan",
@@ -32,8 +33,91 @@ list(
   tar_file(params_file, "sample_data/loci_params.csv"),
   
   # Load input tracking files
-  tar_target(samdf, read_csv(samdf_file)),
-  tar_target(params,read_csv(params_file)),
+  tar_target(samdf, {
+      process <- readr::read_csv(samdf_file)
+      # Check essential parameters are present
+      assertthat::assert_that(all(is.character(process$sample_id)) & all(!is.na(process$sample_id)),
+                              msg = "All samples must have a sample_id in the sample_info.csv file")
+      assertthat::assert_that(all(is.character(process$pcr_primers)) & all(!is.na(process$pcr_primers)),
+                              msg = "All samples must have pcr_primers in the sample_info.csv file")
+      assertthat::assert_that(all(is.character(process$for_primer_seq)) & all(!is.na(process$for_primer_seq)),
+                              msg = "All samples must have a for_primer_seq in the sample_info.csv file")
+      assertthat::assert_that(all(is.character(process$rev_primer_seq)) & all(!is.na(process$rev_primer_seq)),
+                              msg = "All samples must have a rev_primer_seq in the sample_info.csv file")
+      return(process)
+    }),
+  
+  tar_target(params, {
+    # define default params
+    default_params <- tibble::tibble(pcr_primers = NA_character_,
+                   target_gene = NA_character_,
+                   max_primer_mismatch = 0,
+                   read_min_length = 20,
+                   read_max_length = Inf,
+                   read_max_ee = 1,
+                   read_trunc_length = 0,
+                   read_trim_left = 0,
+                   read_trim_right = 0,
+                   asv_min_length = 0,
+                   asv_max_length = Inf,
+                   concat_unmerged = FALSE,
+                   genetic_code = NA_character_,
+                   coding = FALSE,
+                   phmm = NA_character_,
+                   idtaxa_db = NA_character_,
+                   ref_fasta = NA_character_,
+                   idtaxa_confidence = 60,
+                   run_blast = FALSE,
+                   blast_min_identity = 97,
+                   blast_min_coverage = 90,
+                   target_kingdom = NA_character_,
+                   target_phylum = NA_character_,
+                   target_class = NA_character_,
+                   target_order = NA_character_,
+                   target_family = NA_character_,
+                   target_genus = NA_character_,
+                   target_species = NA_character_,
+                   min_sample_reads = 0,
+                   min_taxa_reads = 0,
+                   min_taxa_ra = 0
+    )
+    # Read in params file
+    process <- readr::read_csv(params_file)
+
+    # Make sure all columns are present
+    params_df <-  process %>%
+      bind_rows( default_params %>% filter(FALSE) ) 
+
+    # Check class of all columns
+    for(i in 1:ncol(default_params)){
+      param_to_check <- colnames(default_params)[i]
+      if(!class(default_params %>% dplyr::pull(!!param_to_check)) == class(params_df %>% dplyr::pull(!!param_to_check))){
+        if(all(is.na(params_df %>% dplyr::pull(!!param_to_check)))){
+          params_df <- params_df %>%
+            dplyr::mutate(!!param_to_check := default_params %>% dplyr::pull(!!param_to_check))
+        } else {
+          stop(paste0("The column ", param_to_check, " in loci_params.csv file must be of class ", class(default_params %>% dplyr::pull(!!param_to_check))))
+        }
+      }
+    }
+    
+    # Check idtaxa db exists
+    for(i in seq_along(params_df$idtaxa_db[!is.na(params_df$idtaxa_db)])){
+    assertthat::is.readable(params_df$idtaxa_db[!is.na(params_df$idtaxa_db)][i])
+    }
+    
+    # Check fasta exists
+    for(i in seq_along(params_df$ref_fasta[!is.na(params_df$ref_fasta)])){
+      assertthat::is.readable(params_df$ref_fasta[!is.na(params_df$ref_fasta)][i])
+    }
+    
+    # Check phmm exists
+    for(i in seq_along(params_df$phmm[!is.na(params_df$phmm)])){
+      assertthat::is.readable(params_df$phmm[!is.na(params_df$phmm)][i])
+    }
+    return(params_df)
+    }, tidy_eval = FALSE
+    ),
   
   # Create temporary params_primer file for tracking
   tar_file(params_primer_path,{
@@ -55,6 +139,16 @@ list(
     return(out)
   }),
   tar_target(params_readfilter, read_csv(params_readfilter_path)),
+  
+  # Create temporary params_dada file for tracking
+  tar_file(params_dada_path,{
+    out <- "output/temp/params_dada.csv"
+    params %>% 
+      dplyr::select(pcr_primers, target_gene, concat_unmerged) %>%
+      write_csv(out)
+    return(out)
+  }),
+  tar_target(params_dada, read_csv(params_dada_path)),
   
   # Create temporary params_asvfilter file for tracking
   tar_file(params_asvfilter_path,{
@@ -308,15 +402,18 @@ tar_target(write_postfilt_qualplots, {
   # How to make it just redo one of the dadas if only one runs filtered file changed changed?
   tar_target(dada,{
              temp_samdf3_grouped %>%
-             dplyr::group_by(fcid) %>%
+             dplyr::select(-one_of("concat_unmerged"))%>%
+             dplyr::left_join(params_dada, by="pcr_primers") %>%
+             dplyr::group_by(fcid, concat_unmerged) %>%
              tidyr::nest() %>%
-             dplyr::mutate(dada2 = purrr::map(fcid,
-                                        .f = ~step_dada2(fcid = .x,
-                                                         input_dir = paste0("data/",.x,"/02_filtered"),
-                                                         output = paste0("output/rds/",.x,"_seqtab.rds"),
-                                                         qc_dir = paste0("output/logs/",.x),
+             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, concat_unmerged),
+                                        .f = ~step_dada2(fcid = ..1,
+                                                         input_dir = paste0("data/",..1,"/02_filtered"),
+                                                         output = paste0("output/rds/",..1,"_seqtab.rds"),
+                                                         qc_dir = paste0("output/logs/",..1),
                                                          quiet = FALSE,
-                                                         write_all = FALSE)
+                                                         write_all = FALSE,
+                                                         concat_unmerged=..2)
              ))
              },
              pattern = map(temp_samdf3_grouped), iteration = "vector"),
@@ -526,7 +623,7 @@ tar_target(idtaxa_path, {
             {
            process <- temp_samdf3 %>%
              dplyr::select(-one_of("target_gene", "ref_fasta"))%>%
-             dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, ref_fasta, blast_min_identity, run_blast)) %>%
+             dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, ref_fasta, blast_min_identity, blast_min_coverage, run_blast)) %>%
              tidyr::separate_rows(ref_fasta, sep=";") %>%
              dplyr::group_by(target_gene, pcr_primers, blast_min_identity,ref_fasta, run_blast) %>%
              tidyr::nest()  %>% 
@@ -537,9 +634,9 @@ tar_target(idtaxa_path, {
              dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
                readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
              }))  %>%
-             dplyr::mutate(blast = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, ref_fasta2, blast_min_identity, run_blast),
+             dplyr::mutate(blast = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, ref_fasta2, blast_min_identity, blast_min_coverage, run_blast),
                                         .f = ~{
-                                        if(isTRUE(..6)){
+                                        if(isTRUE(..7)){
                                         blast_res <- step_blast_tophit(
                                           seqtab = ..3,
                                           database = ..4,
@@ -547,7 +644,7 @@ tar_target(idtaxa_path, {
                                           output = paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_blast.rds"),
                                           qc_dir = "output/logs/",
                                           identity = ..5,  
-                                          coverage=95,
+                                          coverage=..6,
                                           evalue=1e06,
                                           max_target_seqs=5,
                                           max_hsp=5, 
@@ -557,7 +654,8 @@ tar_target(idtaxa_path, {
                                         } else {
                                           blast_res <- tibble::enframe(getSequences(..3), name=NULL, value="OTU") %>%
                                             dplyr::mutate(Genus = NA_character_, Species = NA_character_) %>%
-                                            column_to_rownames("OTU")
+                                            column_to_rownames("OTU") %>%
+                                            as.matrix()
                                           saveRDS(blast_res, paste0("output/rds/",..2,"_",basename(..4) %>% stringr::str_remove("\\..*$"),"_blast.rds"))
                                           return(blast_res)
                                         }
