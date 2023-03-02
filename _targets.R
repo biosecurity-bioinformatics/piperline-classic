@@ -914,7 +914,7 @@ tar_target(tax_summary, {
             str_trunc(width=6, side="right", ellipsis = "")
           paste0(name, "_", conf, "%") 
         }) %>%
-        na_if("NA_NA%") %>%
+        mutate_all(~ na_if(., "NA_NA%"))  %>%
         mutate(OTU = rownames(.y))
     })) %>%
     dplyr::select(pcr_primers,idtaxa_db, summary)%>%
