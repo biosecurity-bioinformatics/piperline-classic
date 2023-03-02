@@ -345,7 +345,7 @@ If multiple primer reference databases are to be used for each sample, these can
     + **target_gene** - Name of target gene
     + **max_primer_mismatch** - How much mismatch to allow when detecting primer sequences
 
-* **Read filterign:**
+* **Read filtering:**
     + **read_min_length** - Minimum length of primer trimmed reads
     + **read_max_length** - Maximum length of primer trimmed reads
     + **read_max_ee** - Maximum expected errors of primer trimmed reads
@@ -366,7 +366,7 @@ If multiple primer reference databases are to be used for each sample, these can
     + **idtaxa_confidence** - Minimum bootstrap confidence for IDTAXA
     + **run_blast** - Whether a blast top hit search should be conducted in addition to IDTAXA
     + **blast_min_identity** - Minimum nucleotide identity for BLAST
-    + **blast_min_coverage** - Minumum query coverage for BLAST
+    + **blast_min_coverage** - Minimum query coverage for BLAST
     + **target_kingdom** - Subset to target kingdom
     + **target_phylum** - Subset to target phylum
     + **target_class** - Subset to target class
