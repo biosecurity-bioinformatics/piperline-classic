@@ -1242,8 +1242,11 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
                               ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"),
                               multithread=FALSE, quiet=FALSE){
   
-  seqs <- taxreturn::char2DNAbin(getSequences(seqtab))
-  names(seqs) <- getSequences(seqtab)
+  seqmap <- tibble::enframe(getSequences(seqtab), name = NULL, value="OTU") %>%
+    mutate(name = paste0("SV", seq(length(getSequences(seqtab)))))
+  
+  seqs <- taxreturn::char2DNAbin(seqmap$OTU)
+  names(seqs) <- seqmap$name
   
   # Get the filename of that db that we can use to name the output files
   db_name <- basename(database) %>% stringr::str_remove("_.*$")
@@ -1253,14 +1256,15 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
     blast_spp <- blast_assign_species(query=seqs,db=database, identity=97, coverage=95, evalue=1e06,
                                       max_target_seqs=5, max_hsp=5, ranks=c("Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") , delim=";") %>%
       dplyr::rename(blast_genus = Genus, blast_spp = Species) %>%
-      dplyr::filter(!is.na(blast_spp))
+      dplyr::filter(!is.na(blast_spp)) 
     
     if(nrow(blast_spp) > 0){
       # Transform into taxtab format
       out <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") %>%
         dplyr::left_join(blast_spp %>%
-                           dplyr::select(OTU, Genus = blast_genus, Species = blast_spp) 
-        )%>%
+                           dplyr::select(name = OTU, Genus = blast_genus, Species = blast_spp) %>%
+                           left_join(seqmap) %>%
+                           dplyr::select(-name), by="OTU")%>%
         column_to_rownames("OTU") %>%
         as.matrix()
     } else{
@@ -1530,103 +1534,103 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
     as("matrix") %>% 
     as.data.frame()
   
-  # Filter kingdom
+  # Check if any taxonomic filters are enabled
   ps0 <- ps
-  if(!is.na(kingdom)){
-    if (any(stringr::str_detect(taxtab$Kingdom, kingdom))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Kingdom",
-          value = kingdom
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Kingdom", kingdom," - skipping this filter"))}
+  if(any(!sapply(c(kingdom, phylum, class, order, family, genus, species), is.na))){
+    
+    # Filter kingdom
+    if(!is.na(kingdom)){
+      if (any(stringr::str_detect(taxtab$Kingdom, kingdom))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Kingdom",
+            value = kingdom
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Kingdom", kingdom," - Check your target_kingdom parameter"))
+      }
     }
-  }
-  # Filter phylum
-  ps0 <- ps
-  if(!is.na(phylum)){
-    if (any(stringr::str_detect(taxtab$Phylum, phylum))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Phylum",
-          value = phylum
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Phylum", phylum," - skipping this filter"))}
+    # Filter phylum
+    if(!is.na(phylum)){
+      if (any(stringr::str_detect(taxtab$Phylum, phylum))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Phylum",
+            value = phylum
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Phylum", phylum," - Check your target_phylum parameter"))
+      }
     }
-  }
-  # Filter class
-  ps0 <- ps
-  if(!is.na(class)){
-    if (any(stringr::str_detect(taxtab$Class, class))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Class",
-          value = class
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Class", class," - skipping this filter"))}
+    # Filter class
+    if(!is.na(class)){
+      if (any(stringr::str_detect(taxtab$Class, class))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Class",
+            value = class
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Class", class," - Check your target_phylum parameter"))
+      }
     }
-  }
-  # Filter order
-  ps0 <- ps
-  if(!is.na(order)){
-    if (any(stringr::str_detect(taxtab$Order, order))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Order",
-          value = order
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Order", order," - skipping this filter"))}
+    # Filter order
+    if(!is.na(order)){
+      if (any(stringr::str_detect(taxtab$Order, order))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Order",
+            value = order
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Order", order," - Check your target_phylum parameter"))
+      }
     }
-  }
-  # Filter family
-  ps0 <- ps
-  if(!is.na(family)){
-    if (any(stringr::str_detect(taxtab$Family, family))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Family",
-          value = family
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Family", family," - skipping this filter"))}
+    # Filter family
+    if(!is.na(family)){
+      if (any(stringr::str_detect(taxtab$Family, family))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Family",
+            value = family
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Family", family," - Check your target_phylum parameter"))
+      }
     }
-  }
-  # Filter genus
-  ps0 <- ps
-  if(!is.na(family)){
-    if (any(stringr::str_detect(taxtab$Genus, genus))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Genus",
-          value = genus
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Genus", genus," - skipping this filter"))}
+    # Filter genus
+    if(!is.na(family)){
+      if (any(stringr::str_detect(taxtab$Genus, genus))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Genus",
+            value = genus
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Genus", genus," - Check your target_phylum parameter"))
+      }
     }
-  }
-  # Filter Species
-  ps0 <- ps
-  if(!is.na(family)){
-    if (any(stringr::str_detect(taxtab$Species, species))){
-      ps0 <- ps0 %>%
-        subset_taxa_new(
-          rank = "Species",
-          value = species
-        ) %>%
-        filter_taxa(function(x) mean(x) > 0, TRUE)
-    } else{
-      if (!quiet){warning(paste0("No ASVs were assigned to the Species", species," - skipping this filter"))}
+    # Filter Species
+    if(!is.na(family)){
+      if (any(stringr::str_detect(taxtab$Species, species))){
+        ps0 <- ps0 %>%
+          subset_taxa_new(
+            rank = "Species",
+            value = species
+          ) %>%
+          filter_taxa(function(x) mean(x) > 0, TRUE)
+      } else{
+        warning(paste0("No ASVs were assigned to the Species", species," - Check your target_phylum parameter"))
+      }
     }
+  } else {
+    if (!quiet){message(paste0("No taxonomic filters set - skipping this filter"))}
   }
   
   # Remove any taxa under read count or relative abundance thresholds
@@ -1643,13 +1647,20 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
         ifelse((OTU / sum(OTU)) <= ab,  0, OTU) 
       })
   } else {
+    if (!quiet){message(paste0("No minimum abundance filters set - skipping this filter"))}
     ps1 <- ps0
   }
   
   #Remove all samples under the minimum read threshold 
-  ps2 <- ps1 %>%
-    prune_samples(sample_sums(.)>=min_sample_reads, .) %>% 
-    filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
+  if(min_sample_reads > 0){
+    ps2 <- ps1 %>%
+      prune_samples(sample_sums(.)>=min_sample_reads, .) %>% 
+      filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
+  } else {
+    if (!quiet){message(paste0("No minimum sample reads filter set - skipping this filter"))}
+    ps2 <- ps1 %>%
+      filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
+  }
   
   #Message how many were removed
   if(!quiet){message(nsamples(ps) - nsamples(ps2), " Samples and ", ntaxa(ps) - ntaxa(ps2), " ASVs dropped")}

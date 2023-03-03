@@ -816,16 +816,21 @@ tar_target(assignment_plot, {
     })) %>%
     dplyr::mutate(blast = purrr::pmap(list(pcr_primers, filtered_seqtab, ref_fasta),
                                .f = ~{
-                                 seqs <- colnames(..2)
-                                 names(seqs) <- colnames(..2)
+                                 seqmap <- tibble::enframe(getSequences(..2), name = NULL, value="OTU") %>%
+                                   mutate(name = paste0("SV", seq(length(getSequences(..2)))))
+                                 seqs <- taxreturn::char2DNAbin(seqmap$OTU)
+                                 names(seqs) <- seqmap$name
+                                 
                                  if(length(seqs) > 0){
                                    blast_top_hit(
                                    query = seqs,
                                    db = ..3,
                                    identity=60,
                                    coverage=80) %>% 
-                                   mutate(blastspp = paste0(Genus, " ", Species)) %>%
-                                   dplyr::select(OTU = qseqid, acc, blastspp, pident, length, evalue, qcovs) 
+                                     mutate(blastspp = paste0(Genus, " ", Species)) %>%
+                                     dplyr::select(name = qseqid, acc, blastspp, pident, length, evalue, qcovs) %>%
+                                     left_join(seqmap) %>%
+                                     dplyr::select(-name)
                                  } else {
                                    tibble::enframe(seqs, name=NULL, value="OTU") %>%
                                      dplyr::mutate(acc = NA_character_,
@@ -849,6 +854,15 @@ tar_target(assignment_plot, {
                               .f= ~{
                                 # ADD TITLES HERE!
                                 if(!is.null(..2)){
+                                  
+                                  cols <- c(Root = "#D53E4F",
+                                            Kingdom = "#F46D43",
+                                            Phylum = "#FDAE61",
+                                            Class = "#FEE08B",
+                                            Order = "#E6F598",
+                                            Family = "#ABDDA4",
+                                            Genus = "#66C2A5",
+                                            Species = "#3288BD") 
                                   ..2 %>%
                                     dplyr::select(pident, rank = lowest) %>%
                                     dplyr::mutate(rank = factor(rank, levels = c("Root","Kingdom","Phylum","Class","Order","Family","Genus","Species"))) %>%
@@ -859,7 +873,7 @@ tar_target(assignment_plot, {
                                          x = "BLAST top hit % identity",
                                          y = "OTUs") + 
                                     scale_x_continuous(breaks=seq(60,100,2)) +
-                                    scale_fill_brewer(name = "Taxonomic \nAssignment", palette = "Spectral")+
+                                    scale_fill_manual(name = "Taxonomic \nAssignment", values = cols)+
                                     theme_bw()+
                                     theme(
                                       strip.background = element_rect(colour = "black", fill = "lightgray"),
@@ -950,7 +964,8 @@ tar_target(tax_summary, {
     process <- step_phyloseq(
        seqtab = merged_seqtab_path,
        taxtab = merged_tax,
-       samdf = temp_samdf2,
+       samdf = temp_samdf2 %>% dplyr::select(-any_of(c("starting_fwd", "starting_rev", 
+                                                     "trimmed_fwd",	"trimmed_rev"))),
        seqs=NULL,
        phylo=NULL,
        name_variants=TRUE)
@@ -987,7 +1002,7 @@ tar_target(accumulation_curve, {
 # Taxonomic and minimum abundance filtering
 tar_target(ps_filtered,{
      # if multiple primers were used - split ps into different primers
-    process <-  params_ps %>%
+    process <- params_ps %>%
        dplyr::mutate(ps_obj = purrr::map(pcr_primers,
               .f = ~{
                     physeq <- ps %>%
@@ -996,6 +1011,8 @@ tar_target(ps_filtered,{
                       dplyr::filter(pcr_primers == .x)
                     if(nrow(new_samdat) > 0){
                       phyloseq::sample_data(physeq) <- phyloseq::sample_data(new_samdat)
+                      physeq <- physeq %>% 
+                        filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
                       return(physeq)
                     } else{
                       return(NULL)
