@@ -498,7 +498,7 @@ tar_target(subset_seqtab_path,
          })) %>%
          tidyr::unnest(c(data, filtered_asvs))%>%
          dplyr::select(sample_id, sample_name, fcid, reads_starting, reads_chimerafilt, pcr_primers, reads_lengthfilt,
-                       reads_phmmfilt, reads_framefilt, reads_final, plot)%>%
+                       reads_phmmfilt, reads_framefilt, reads_final, plot, cleanup_summary)%>%
          dplyr::mutate(path = paste0("output/rds/",pcr_primers,"_seqtab.cleaned.rds"))
  }, iteration = "vector"),
  
@@ -507,6 +507,14 @@ tar_target(filtered_seqtab_path,
            {
              return(unique(filtered_seqtab$path))
            }, format="file"),
+
+# Write out seqtab filtering summary csv
+tar_target(write_seqtab_summary, {
+  bind_rows(unique(filtered_seqtab$cleanup_summary)) %>%
+    write_csv("output/logs/ASV_cleanup_summary.csv")
+  out <- "output/logs/ASV_cleanup_summary.csv"
+  return(out)
+}, format="file", iteration = "vector"),
 
 # Write out seqtab filtering plots
 tar_target(write_seqtab_qualplots, {
@@ -775,7 +783,6 @@ tar_target(idtaxa_path, {
                         dplyr::bind_rows() %>%
                         dplyr::distinct() # Remove any exact duplicates from save ASV being in different seqtab
                       
-                      print(tax_merged)
                       # Check for duplicated ASVs across taxtabs
                       if(any(duplicated(tax_merged$OTU))){
                         warning("Duplicated ASVs detected, selecting first occurance")

@@ -992,8 +992,8 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
 
 # Group by target loci and apply
 step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max_length = NULL, 
-                            check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
-
+                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
+  
   # Handle NA inputs
   if(is.na(min_length)){min_length <- NULL}
   if(is.na(max_length)){max_length <- NULL}
@@ -1015,7 +1015,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   if(!quiet){message(paste(sum(seqtab_nochim)/sum(seqtab),"of starting abundance remaining after chimera removal"))}
   reads_chimerafilt <- rowSums(seqtab_nochim)
   
-  #cut to expected size allowing for some codon indels - do separately for each loci
+  # cut to expected size
   if(any(!is.null(c(min_length, max_length)), na.rm = TRUE) & any(reads_chimerafilt > 0)){
     if(!is.null(min_length) & !is.null(max_length)){
       seqtab_cut <- seqtab_nochim[,nchar(colnames(seqtab_nochim)) %in% min_length:max_length]
@@ -1106,14 +1106,25 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
       !OTU %in% getSequences(seqtab_phmm) ~ "PHMM",
       !OTU %in% getSequences(seqtab_final) ~ "Stop codons",
       TRUE ~ "Retained"
-    )) 
-  write_csv(cleanup, paste0(qc_dir,"/ASV_cleanup_summary.csv"))
+    )) %>%
+    dplyr::mutate(concat = str_detect(OTU, "NNNNNNNNNN")) %>%
+    dplyr::mutate(type = case_when(
+      concat ~ paste0("Unmerged-", type),
+      TRUE ~ type
+    )) %>%
+    dplyr::mutate(pcr_primers = pcr_primers) %>%
+    dplyr::select(-concat)
   
-  cols <- c(`Chimera` = "#d7191c",
-            `Incorrect size` = "#fdae61",
-            `PHMM` = "#ffffbf",
+  cols <- c(`Chimera` = "#9e0142",
+            `Unmerged-Chimera` = "#d53e4f",
+            `Incorrect size` = "#f46d43",
+            `Unmerged-Incorrect size` = "#fdae61",
+            `PHMM` = "#fee08b",
+            `Unmerged-PHMM` = "#e6f598",
             `Stop codons` = "#abdda4",
-            `Retained` = "#2b83ba") 
+            `Unmerged-Stop codons` = "#66c2a5",
+            `Retained` = "#3288bd",
+            `Unmerged-Retained` = "#5e4fa2") 
   
   # Output length distribution plots
   gg.abundance <- ggplot2::ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
@@ -1164,7 +1175,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   
   # Create combined plot
   out_plot <- gg.abundance / gg.unique
-
+  
   # Create output
   res <- tibble(
     sample_id = rownames(seqtab) %>% stringr::str_remove(pattern="_S[0-9]+_R[1-2]_.*$"),
@@ -1177,6 +1188,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   )
   return(list(filtered_seqtab = seqtab_final, 
               filtered_asvs = res,
+              cleanup_summary = cleanup,
               plot = list(out_plot)))
 }
 
