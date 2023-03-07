@@ -1109,11 +1109,18 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
     )) 
   write_csv(cleanup, paste0(qc_dir,"/ASV_cleanup_summary.csv"))
   
+  cols <- c(`Chimera` = "#d7191c",
+            `Incorrect size` = "#fdae61",
+            `PHMM` = "#ffffbf",
+            `Stop codons` = "#abdda4",
+            `Retained` = "#2b83ba") 
+  
   # Output length distribution plots
   gg.abundance <- ggplot2::ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
     geom_bar(stat="identity") + 
     scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
     theme_bw()+
+    scale_fill_manual(values = cols)+
     theme(
       strip.background = element_rect(colour = "black", fill = "lightgray"),
       strip.text = element_text(size=9, family = ""),
@@ -1136,6 +1143,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
     geom_histogram(binwidth = 1) + 
     scale_x_continuous(limits=c(min(cleanup$length)-10, max(cleanup$length)+10))+
     theme_bw()+
+    scale_fill_manual(values = cols)+
     theme(
       strip.background = element_rect(colour = "black", fill = "lightgray"),
       strip.text = element_text(size=9, family = ""),
@@ -1178,7 +1186,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
 # Group by target loci and apply
 step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
                         ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"),
-                        return_ids=FALSE){
+                        return_ids=FALSE, remove_Ns=FALSE){
   # Print arguments for testing
   # Load the relevent db
   trainingSet <- readRDS(normalizePath(database))
@@ -1187,7 +1195,14 @@ step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FA
   seqs <- DNAStringSet(getSequences(seqtab)) # Create a DNAStringSet from the ASVs
   # Stop if seqs are 0
   if(length(seqs) > 0){
-      
+    
+    # Remove any 10bp N bases that were added by concatenating reads reads  
+    if(remove_Ns){
+      if(any(seqs %>% purrr::map_lgl(~{str_detect(as.character(.x), "NNNNNNNNNN")}))){
+        seqs <- DNAStringSet(seqs %>% purrr::map_chr(~{str_replace(as.character(.x), "NNNNNNNNNN", "")}))
+      }
+    }
+    
     # Classify 
     ids <- DECIPHER::IdTaxa(seqs, trainingSet, processors=1, threshold = threshold, verbose=!quiet, strand = "top") 
     
@@ -1254,7 +1269,7 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
   # Stop if seqs are 0
   if(length(seqs) > 0){
     blast_spp <- blast_assign_species(query=seqs,db=database, identity=97, coverage=95, evalue=1e06,
-                                      max_target_seqs=5, max_hsp=5, ranks=c("Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species") , delim=";") %>%
+                                      max_target_seqs=5, max_hsp=5, ranks=ranks, delim=";") %>%
       dplyr::rename(blast_genus = Genus, blast_spp = Species) %>%
       dplyr::filter(!is.na(blast_spp)) 
     

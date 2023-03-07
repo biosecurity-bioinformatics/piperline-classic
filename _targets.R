@@ -82,22 +82,27 @@ list(
                    min_taxa_ra = 0
     )
     # Read in params file
-    process <- readr::read_csv(params_file)
+    input_params <- readr::read_csv(params_file)
 
     # Make sure all columns are present
-    params_df <-  process %>%
+    params_df <-input_params %>%
       bind_rows( default_params %>% filter(FALSE) ) 
 
+    # Check columns arent NA
+    for(i in 1:ncol(default_params)){
+      param_to_check <- colnames(default_params)[i]
+      if(all(is.na(params_df %>% dplyr::pull(!!param_to_check))) & !param_to_check %in% colnames(input_params)){
+        warning(paste0("Parameter: ", param_to_check, " is NA, using default: ", default_params %>% dplyr::pull(!!param_to_check)))
+        params_df <- params_df %>%
+          dplyr::mutate(!!param_to_check := default_params %>% dplyr::pull(!!param_to_check))
+      }
+    }
+    
     # Check class of all columns
     for(i in 1:ncol(default_params)){
       param_to_check <- colnames(default_params)[i]
       if(!class(default_params %>% dplyr::pull(!!param_to_check)) == class(params_df %>% dplyr::pull(!!param_to_check))){
-        if(all(is.na(params_df %>% dplyr::pull(!!param_to_check)))){
-          params_df <- params_df %>%
-            dplyr::mutate(!!param_to_check := default_params %>% dplyr::pull(!!param_to_check))
-        } else {
-          stop(paste0("The column ", param_to_check, " in loci_params.csv file must be of class ", class(default_params %>% dplyr::pull(!!param_to_check))))
-        }
+        stop(paste0("The column ", param_to_check, " in loci_params.csv file must be of class ", class(default_params %>% dplyr::pull(!!param_to_check))))
       }
     }
     
@@ -806,6 +811,10 @@ tar_target(assignment_plot, {
     tidyr::separate_rows(ref_fasta, sep=";") %>%
     dplyr::group_by(target_gene, pcr_primers, idtaxa_db, ref_fasta) %>%
     tidyr::nest()  %>% 
+    dplyr::mutate(ref_fasta2 = purrr::map(ref_fasta, ~{
+      ref_fasta_tracked[stringr::str_detect(ref_fasta_tracked, .x)]
+    }))  %>%
+    unnest(ref_fasta2) %>%
     dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
     }))   %>%
@@ -814,7 +823,7 @@ tar_target(assignment_plot, {
         seqateurs::unclassified_to_na(rownames=FALSE) %>%
         dplyr::mutate(lowest = seqateurs::lowest_classified(.)) 
     })) %>%
-    dplyr::mutate(blast = purrr::pmap(list(pcr_primers, filtered_seqtab, ref_fasta),
+    dplyr::mutate(blast = purrr::pmap(list(pcr_primers, filtered_seqtab, ref_fasta2),
                                .f = ~{
                                  seqmap <- tibble::enframe(getSequences(..2), name = NULL, value="OTU") %>%
                                    mutate(name = paste0("SV", seq(length(getSequences(..2)))))
@@ -826,9 +835,10 @@ tar_target(assignment_plot, {
                                    query = seqs,
                                    db = ..3,
                                    identity=60,
-                                   coverage=80) %>% 
+                                   coverage=80,
+                                   ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species")) %>% 
                                      mutate(blastspp = paste0(Genus, " ", Species)) %>%
-                                     dplyr::select(name = qseqid, acc, blastspp, pident, length, evalue, qcovs) %>%
+                                     dplyr::select(name = qseqid, acc, blastspp, pident, total_score, max_score, evalue, qcovs) %>%
                                      left_join(seqmap) %>%
                                      dplyr::select(-name)
                                  } else {
@@ -871,7 +881,7 @@ tar_target(assignment_plot, {
                                     labs(title = paste0(..1, " Top hit identity distribution"),
                                          subtitle = paste0("IDTAXA database:", ..3, " BLAST database:", ..4),
                                          x = "BLAST top hit % identity",
-                                         y = "OTUs") + 
+                                         y = "Sequence Variants") + 
                                     scale_x_continuous(breaks=seq(60,100,2)) +
                                     scale_fill_manual(name = "Taxonomic \nAssignment", values = cols)+
                                     theme_bw()+
@@ -940,7 +950,7 @@ tar_target(tax_summary, {
       dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, joint)%>% 
       unnest(joint)  %>%
       dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, OTU, acc, blast_top_hit = blastspp, 
-                    blast_identity = pident, blast_evalue = evalue, blast_qcov = qcovs)
+                    blast_identity = pident, blast_evalue = evalue, blast_total_score = total_score, blast_max_score = max_score, blast_qcov = qcovs)
   } else {
     blast_summary <- assignment_plot %>%
       dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta, joint)%>% 

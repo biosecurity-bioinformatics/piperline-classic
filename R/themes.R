@@ -10,7 +10,7 @@ base_theme <- theme_bw()+
     text = element_text(size=9, family = ""),
     axis.text = element_text(size=8, family = ""),
     legend.position = "none",
-    panel.border = element_rect(colour = "black", fill=NA, size=0.5),
-    panel.grid = element_line(size = rel(0.5)),
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+    panel.grid = element_line(linewidth = rel(0.5)),
     #panel.grid = element_blank()
   )
