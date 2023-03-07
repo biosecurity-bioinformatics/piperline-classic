@@ -225,6 +225,7 @@ If multiple primer reference databases are to be used for each sample, these can
 * **ASV filtering**
     + **asv_min_length** - Minimum length of amplicon
     + **asv_max_length** - Maximum length of amplicon
+    + **concat_unmerged** - Retain any unmerged read pairs by concatenating them together separated by a string of 10 N bases
     + **genetic_code** - Genetic code for amplicon - see Biostrings::GENETIC_CODE_TABLE
     + **coding** - Is the amplicon from a protein coding gene
     + **phmm** - Path to profile hidden markov model (Optional)
