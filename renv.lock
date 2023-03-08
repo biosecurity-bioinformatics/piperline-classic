@@ -128,13 +128,13 @@
     },
     "DelayedArray": {
       "Package": "DelayedArray",
-      "Version": "0.23.2",
+      "Version": "0.24.0",
       "Source": "Bioconductor",
       "git_url": "https://git.bioconductor.org/packages/DelayedArray",
-      "git_branch": "master",
-      "git_last_commit": "acb817e",
-      "git_last_commit_date": "2022-09-13",
-      "Hash": "ee868373c7dee1889458623fc4a027fb",
+      "git_branch": "RELEASE_3_16",
+      "git_last_commit": "68ee3d0",
+      "git_last_commit_date": "2022-11-01",
+      "Hash": "51da2aa8f52a4f3f08b65a8f1c62530e",
       "Requirements": [
         "BiocGenerics",
         "IRanges",
