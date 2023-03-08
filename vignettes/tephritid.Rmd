@@ -23,7 +23,6 @@ editor_options:
 ```{r setup, include=FALSE}
 # Knitr global setup - change eval to true to run code
 library(knitr)
-library(tidyverse)
 library(kableExtra)
 library(plotly)
 library(targets)
