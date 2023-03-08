@@ -188,6 +188,15 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
   ## Sequencing run quality check using savR
   fc <- savR::savR(seq_dir)
   
+  # Ensure indices are present
+  if(length(fc@parsedData)==0){
+    warning(paste0("Flow cell metrics could not be parsed for", fcid, " skipping seq run qc"))
+    out <- tibble(fcid = fcid,
+                  reads_pf = NA_integer_,
+                  reads_total = NA_integer_)
+    return(out)
+  }
+  
   if(write_all){
     readr::write_csv(savR::correctedIntensities(fc), normalizePath(paste0(qc_dir, "/correctedIntensities.csv")))
     readr::write_csv(savR::errorMetrics(fc), normalizePath(paste0(qc_dir, "/errorMetrics.csv")))
