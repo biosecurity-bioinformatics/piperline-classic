@@ -982,7 +982,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   
   #Construct sequence table
   sample_names <- basename(filtFs) %>% stringr::str_remove("_S[0-9]+_R[1-2]_.*$")
-  seqtab <- makeSequenceTable(mergers_rescued)
+  seqtab <- makeSequenceTable(mergers)
   saveRDS(seqtab, output)
   
   # Track reads
