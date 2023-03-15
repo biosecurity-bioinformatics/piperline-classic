@@ -19,7 +19,7 @@ step_demux_samdf <- function(samdf){
                    sample_id = paste0(sample_id, "_",pcr_primers)
             ) 
         }
-        if(!all(stringr::str_detect(x$sample_id, x$pcr_primers))){
+        if(!all(stringr::str_detect(x$sample_id ,paste0(x$pcr_primers, "$")))){
           x <- x %>%
             dplyr::mutate(sample_id = paste0(sample_id, "_",pcr_primers))
         }
