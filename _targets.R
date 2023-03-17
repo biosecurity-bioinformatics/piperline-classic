@@ -445,13 +445,12 @@ tar_target(dada_path,
              tidyr::nest() %>%
              dplyr::mutate(subset_seqtab = purrr::map(pcr_primers, 
                    .f = ~{
-                   #seqtabs <- list.files("output/rds/", pattern="seqtab.rds", full.names = TRUE)
                    if(length(dada_path) > 1){
                    st.all <- mergeSequenceTables(tables=dada_path)
                    } else if(length(dada_path) == 1) {
                    st.all <- readRDS(dada_path)
                    }
-                   st.all <- st.all[str_detect(rownames(st.all), .x),]
+                   st.all <- st.all[stringr::str_detect(rownames(st.all), paste0(.x, "(-|_|$)")),] # Match primer followed by underscore, dash, or EOL
                    st.all <- st.all[,colSums(st.all) > 0]
                    saveRDS(st.all, paste0("output/rds/",.x,"_seqtab.rds"))
                    out <- rowSums(st.all) %>%
