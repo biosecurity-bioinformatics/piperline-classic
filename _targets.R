@@ -478,7 +478,7 @@ tar_target(subset_seqtab_path,
            dplyr::group_by(pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
            tidyr::nest() %>%
            dplyr::mutate(subset_seqtab = purrr::map(pcr_primers, ~{
-                readRDS(subset_seqtab_path[stringr::str_detect(subset_seqtab_path, .x)])
+              readRDS(subset_seqtab_path[stringr::str_detect(subset_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
            })) %>%
            dplyr::ungroup()%>%
            dplyr::mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
@@ -538,7 +538,7 @@ tar_target(write_seqtab_qualplots, {
         seqtabs <- filtered_seqtab_path
         seqtabs <- seqtabs[seqtabs %>%
                              purrr::map_lgl(function(y){
-                               any(stringr::str_detect(y, unique(.x$pcr_primers)))
+                               any(stringr::str_detect(y, paste0(unique(.x$pcr_primers), "_seqtab.cleaned.rds")))
                              })]
         # Remove empty seqtabs
         empty <- seqtabs[purrr::map_lgl(seqtabs, function(z){
@@ -603,7 +603,7 @@ tar_target(write_seqtab_qualplots, {
      }))  %>%
      unnest(idtaxa_db2)%>%
      dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
+       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
      }))  %>%
      dplyr::mutate(idtaxa = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, idtaxa_db2, idtaxa_confidence),
                                  .f = ~step_idtaxa(
@@ -649,7 +649,7 @@ tar_target(idtaxa_path, {
              }))  %>%
              unnest(ref_fasta2) %>%
              dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-               readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
+               readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
              }))  %>%
              dplyr::mutate(blast = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, ref_fasta2, blast_min_identity, blast_min_coverage, run_blast),
                                         .f = ~{
@@ -690,7 +690,7 @@ tar_target(idtaxa_path, {
                 dplyr::group_by(pcr_primers) %>%
                 tidyr::nest() %>%
                 dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-                  readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
+                  readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
                 }))%>% 
                 dplyr::mutate(idtaxa = purrr::pmap(list(data, pcr_primers, filtered_seqtab),
                                     .f = ~{
@@ -700,7 +700,7 @@ tar_target(idtaxa_path, {
                                         unique() %>%
                                         basename() %>% 
                                         stringr::str_remove("\\..*$")
-                                      taxtabs <- idtaxa_path[stringr::str_detect(idtaxa_path, idtaxa_dbs)& stringr::str_detect(idtaxa_path, ..2)] %>%
+                                      taxtabs <- idtaxa_path[stringr::str_detect(idtaxa_path, idtaxa_dbs)& stringr::str_detect(idtaxa_path, paste0(..2, "_"))] %>%
                                         purrr::map(readRDS)
                                       if(length(taxtabs) == 1){
                                         out <- taxtabs[[1]]
@@ -724,7 +724,7 @@ tar_target(idtaxa_path, {
                                         unique() %>%
                                         basename() %>% 
                                         stringr::str_remove("\\..*$")
-                                      taxtabs <- tax_blast_path[stringr::str_detect(tax_blast_path, ref_fastas) & stringr::str_detect(tax_blast_path, ..2)]%>%
+                                      taxtabs <- tax_blast_path[stringr::str_detect(tax_blast_path, ref_fastas) & stringr::str_detect(tax_blast_path, paste0(..2, "_"))]%>%
                                         purrr::map(readRDS)
                                       if(length(taxtabs) == 1){
                                         out <- taxtabs[[1]]
@@ -774,7 +774,7 @@ tar_target(idtaxa_path, {
                       taxtabs <- joint_tax
                       taxtabs <- taxtabs[taxtabs %>%
                                            purrr::map_lgl(function(y){
-                                             any(stringr::str_detect(y, unique(.x$pcr_primers)))
+                                             any(stringr::str_detect(y, paste0(unique(.x$pcr_primers),"_taxblast.rds")))
                                            })] %>%
                         purrr::map(readRDS) 
                       taxtabs <- taxtabs[sapply(taxtabs, nrow) >0 ] 
@@ -827,7 +827,7 @@ tar_target(assignment_plot, {
     }))  %>%
     unnest(ref_fasta2) %>%
     dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-      readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path, .x)])
+      readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
     }))   %>%
     dplyr::mutate(tax = purrr::map(pcr_primers, ~{
       readRDS(joint_tax[stringr::str_detect(joint_tax, .x)])%>% 
