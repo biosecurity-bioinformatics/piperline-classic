@@ -1019,6 +1019,44 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   }
   reads_starting <- rowSums(seqtab)
   
+  # Load in profile hidden markov model if provided
+  if(is.character(phmm) && stringr::str_detect(phmm, ".rds")){
+    phmm_model <- readRDS(phmm)
+  } else if (is(phmm, "PHMM")){
+    phmm_model <- phmm
+  } else {
+    phmm_model <- NULL
+  }
+  
+  # subset PHMM if primers were provided
+  if (is(phmm_model, "PHMM") && !is.null(primers)){
+    # Check that one of the two primers can bind
+    Fbind <- get_binding_position(primers[1], model = phmm_model, tryRC = TRUE, min_score = 10)
+    Rbind <- get_binding_position(primers[2], model = phmm_model, tryRC = TRUE, min_score = 10)
+    if(!is.na(Fbind$start) & !is.na(Rbind$start)){
+      phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
+    } else  if(!is.na(Fbind$start) & is.na(Rbind$start)){
+      # Reverse primer not found - Try with subsets
+      for(r in seq(1, nchar(primers[2])-10, 1)){ #Minimum length of 10 as this has to match minscore
+        Rbind <- get_binding_position(str_remove(primers[2], paste0("^.{1,",r,"}")), model = phmm_model, tryRC = TRUE, min_score = 10)
+        if (!is.na(Rbind$start)) {
+          primers[2] <- str_remove(primers[2], paste0("^.{1,",r,"}"))
+          break
+        }
+      }
+      phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
+    } else  if(is.na(Fbind$start) & !is.na(Rbind$start)){
+      # Forward primer not found - Try with subsets
+      for(r in seq(1, nchar(primers[1])-10, 1)){ #Minimum length of 10 as this has to match minscore
+        Rbind <- get_binding_position(str_remove(primers[1], paste0("^.{1,",r,"}")), model = phmm_model, tryRC = TRUE, min_score = 10)
+        if (!is.na(Rbind$start)) {
+          primers[1] <- str_remove(primers[1], paste0("^.{1,",r,"}"))
+          break
+        }
+      }
+      phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
+    }
+  }
   # Remove chimeras  
   seqtab_nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=multithread, verbose=!quiet)
   if(!quiet){message(paste(sum(seqtab_nochim)/sum(seqtab),"of starting abundance remaining after chimera removal"))}
@@ -1043,20 +1081,6 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
     seqtab_cut <- seqtab_nochim
     reads_lengthfilt <- rep(0,nrow(seqtab)) 
     names(reads_lengthfilt) <- rownames(seqtab)
-  }
-  
-  # Load in profile hidden markov model if provided
-  if(is.character(phmm) && stringr::str_detect(phmm, ".rds")){
-    phmm_model <- readRDS(phmm)
-  } else if (is(phmm, "PHMM")){
-    phmm_model <- phmm
-  } else {
-    phmm_model <- NULL
-  }
-  
-  # subset PHMM if primers were provided
-  if (is(phmm_model, "PHMM") && !is.null(primers)){
-    phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
   }
   
   # Align against phmm
