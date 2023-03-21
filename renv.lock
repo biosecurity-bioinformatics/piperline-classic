@@ -2823,9 +2823,9 @@
       "RemoteUsername": "alexpiper",
       "RemoteRepo": "taxreturn",
       "RemoteRef": "HEAD",
-      "RemoteSha": "64173942488eca310de94921b6ff3cc7a81c28d2",
+      "RemoteSha": "45b1a771f890c75f5e0128f222bf388419a152ec",
       "RemoteHost": "api.github.com",
-      "Hash": "743cb0c0626705c201a69d3f7b29ddc2",
+      "Hash": "6bfc50b4be2a678096752140e85d7bf3",
       "Requirements": [
         "BiocManager",
         "Biostrings",
