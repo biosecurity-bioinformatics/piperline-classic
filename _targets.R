@@ -603,7 +603,7 @@ tar_target(write_seqtab_qualplots, {
      }))  %>%
      unnest(idtaxa_db2)%>%
      dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
+       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.cleaned.rds"))]) 
      }))  %>%
      dplyr::mutate(idtaxa = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, idtaxa_db2, idtaxa_confidence),
                                  .f = ~step_idtaxa(
@@ -649,7 +649,7 @@ tar_target(idtaxa_path, {
              }))  %>%
              unnest(ref_fasta2) %>%
              dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-               readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
+               readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.cleaned.rds"))]) 
              }))  %>%
              dplyr::mutate(blast = purrr::pmap(list(target_gene, pcr_primers, filtered_seqtab, ref_fasta2, blast_min_identity, blast_min_coverage, run_blast),
                                         .f = ~{
@@ -690,7 +690,7 @@ tar_target(idtaxa_path, {
                 dplyr::group_by(pcr_primers) %>%
                 tidyr::nest() %>%
                 dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-                  readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
+                  readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.cleaned.rds"))]) 
                 }))%>% 
                 dplyr::mutate(idtaxa = purrr::pmap(list(data, pcr_primers, filtered_seqtab),
                                     .f = ~{
@@ -827,7 +827,7 @@ tar_target(assignment_plot, {
     }))  %>%
     unnest(ref_fasta2) %>%
     dplyr::mutate(filtered_seqtab = purrr::map(pcr_primers, ~{
-      readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
+      readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.cleaned.rds"))]) 
     }))   %>%
     dplyr::mutate(tax = purrr::map(pcr_primers, ~{
       readRDS(joint_tax[stringr::str_detect(joint_tax, .x)])%>% 
