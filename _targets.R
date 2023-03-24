@@ -830,7 +830,7 @@ tar_target(assignment_plot, {
       readRDS(filtered_seqtab_path[stringr::str_detect(filtered_seqtab_path,  paste0(.x, "_seqtab.cleaned.rds"))]) 
     }))   %>%
     dplyr::mutate(tax = purrr::map(pcr_primers, ~{
-      readRDS(joint_tax[stringr::str_detect(joint_tax, .x)])%>% 
+      readRDS(joint_tax[stringr::str_detect(joint_tax, paste0(.x, "_taxblast.rds"))])%>% 
         seqateurs::unclassified_to_na(rownames=FALSE) %>%
         dplyr::mutate(lowest = seqateurs::lowest_classified(.)) 
     })) %>%
