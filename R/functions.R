@@ -875,10 +875,8 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
 }
 
 #  DADA2 ------------------------------------------------------------------
-
-
-step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE, pool="pseudo",
-                       write_all = FALSE, quiet=FALSE, concat_unmerged=FALSE){
+step_errormodel <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE,
+                       write_all = FALSE, quiet=FALSE){
   
   input_dir <- normalizePath(input_dir)
   output <- normalizePath(output)
@@ -905,13 +903,47 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   p1 <-  dada2::plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
   p2 <-  dada2::plotErrors(errR, nominalQ = TRUE) + ggtitle(paste0(fcid, " Reverse Reads"))
   pdf(paste0(qc_dir,"/",fcid,"_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
-  plot(p1)
-  plot(p2)
+    plot(p1)
+    plot(p2)
   try(dev.off(), silent=TRUE)
+  
+  error_model <- list(errF, errR)
+  saveRDS(error_model, output)
+}
+
+step_dada2 <- function(fcid, input_dir, output, qc_dir, error_model, pool="pseudo",
+                       quiet=FALSE,  multithread=FALSE){
+  
+  errF <- error_model[[1]]
+  errR <- error_model[[2]]
+  
+  input_dir <- normalizePath(input_dir)
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
+  filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
+  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
   
   #Denoise reads
   dadaFs <- dada2::dada(filtFs, err = errF, multithread = multithread, pool = pool, verbose = TRUE)
   dadaRs <- dada2::dada(filtRs, err = errR, multithread = multithread, pool = pool, verbose = TRUE)
+  
+  dada <- list(dadaFs, dadaRs)
+  saveRDS(dada, output)
+}
+
+step_mergereads <- function(fcid, input_dir, output, qc_dir, dada,
+                        write_all = FALSE, quiet=FALSE,  multithread=FALSE, concat_unmerged=FALSE){
+  
+  dadaFs <- dada[[1]]
+  dadaRs <- dada[[2]]
+  
+  input_dir <- normalizePath(input_dir)
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
+  filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
+  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
   
   # Merge reads
   if(write_all | concat_unmerged){

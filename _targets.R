@@ -408,26 +408,70 @@ tar_target(write_postfilt_qualplots, {
 
   # Group temporary samdf by fcid
   tar_group_by(temp_samdf3_grouped, temp_samdf3, fcid),
+
+  # How to make it just redo one of the dadas if only one runs filtered file changed changed?
+  tar_target(error_model,{
+    process <- temp_samdf3_grouped %>%
+      dplyr::group_by(fcid) %>%
+      tidyr::nest() %>%
+      dplyr::mutate(error_model = purrr::pmap(dplyr::select(.,fcid),
+                                        .f = ~step_errormodel(fcid = ..1,
+                                                         input_dir = paste0("data/",..1,"/02_filtered"),
+                                                         output = paste0("output/rds/",..1,"_errormodel.rds"),
+                                                         qc_dir = paste0("output/logs/",..1),
+                                                         nbases=1e+08,
+                                                         randomize=FALSE,
+                                                         multithread=FALSE,
+                                                         quiet = FALSE,
+                                                         write_all = FALSE)
+      ))
+    return(paste0("output/rds/",unique(process$fcid),"_errormodel.rds"))
+  },
+  pattern = map(temp_samdf3_grouped), iteration = "vector"),
  
   # How to make it just redo one of the dadas if only one runs filtered file changed changed?
-  tar_target(dada,{
-             temp_samdf3_grouped %>%
-             dplyr::select(-one_of("concat_unmerged"))%>%
-             dplyr::left_join(params_dada, by="pcr_primers") %>%
-             dplyr::group_by(fcid, concat_unmerged) %>%
-             tidyr::nest() %>%
-             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, concat_unmerged),
+  tar_target(denoise,{
+    process <- temp_samdf3_grouped %>%
+             dplyr::group_by(fcid) %>%
+             tidyr::nest() %>%    
+             dplyr::mutate(error_model = purrr::map(fcid, ~{
+                readRDS(error_model[stringr::str_detect(error_model,  paste0(.x, "_errormodel.rds"))]) 
+              })) %>%
+             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, error_model),
                                         .f = ~step_dada2(fcid = ..1,
                                                          input_dir = paste0("data/",..1,"/02_filtered"),
-                                                         output = paste0("output/rds/",..1,"_seqtab.rds"),
+                                                         output = paste0("output/rds/",..1,"_dada.rds"),
                                                          qc_dir = paste0("output/logs/",..1),
-                                                         quiet = FALSE,
-                                                         write_all = FALSE,
-                                                         concat_unmerged=..2)
+                                                         error_model = ..2,
+                                                         pool = "pseudo",
+                                                         multithread = FALSE,
+                                                         quiet = FALSE)
              ))
+        return(paste0("output/rds/",unique(process$fcid),"_dada.rds"))
              },
              pattern = map(temp_samdf3_grouped), iteration = "vector"),
 
+tar_target(dada,{
+  process <- temp_samdf3_grouped %>%
+    dplyr::select(-one_of("concat_unmerged"))%>%
+    dplyr::left_join(params_dada, by="pcr_primers") %>%
+    dplyr::group_by(fcid, concat_unmerged) %>%
+    tidyr::nest() %>%
+    dplyr::mutate(dada = purrr::map(fcid, ~{
+      readRDS(denoise[stringr::str_detect(denoise,  paste0(.x, "_dada.rds"))]) 
+    })) %>%
+    dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, concat_unmerged, dada),
+                                      .f = ~step_mergereads(fcid = ..1,
+                                                       input_dir = paste0("data/",..1,"/02_filtered"),
+                                                       output = paste0("output/rds/",..1,"_seqtab.rds"),
+                                                       qc_dir = paste0("output/logs/",..1),
+                                                       quiet = FALSE,
+                                                       write_all = FALSE,
+                                                       concat_unmerged=..2,
+                                                       dada = ..3)
+    ))
+},
+pattern = map(temp_samdf3_grouped), iteration = "vector"),
 
 # Return filepath for tracking
 tar_target(dada_path,
