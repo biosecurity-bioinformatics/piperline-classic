@@ -407,17 +407,18 @@ tar_target(write_postfilt_qualplots, {
 # Infer sequence variants with DADA2 --------------------------------------
 
   # Group temporary samdf by fcid
-  tar_group_by(temp_samdf3_grouped, temp_samdf3, fcid),
+  tar_group_by(temp_samdf3_grouped, temp_samdf3, fcid, pcr_primers),
 
-  # How to make it just redo one of the dadas if only one runs filtered file changed changed?
+  # TODO: make it just redo one of the dadas if only one runs filtered file changed changed?
   tar_target(error_model,{
     process <- temp_samdf3_grouped %>%
-      dplyr::group_by(fcid) %>%
+      dplyr::group_by(fcid, pcr_primers) %>%
       tidyr::nest() %>%
-      dplyr::mutate(error_model = purrr::pmap(dplyr::select(.,fcid),
+      dplyr::mutate(error_model = purrr::pmap(dplyr::select(.,fcid, pcr_primers),
                                         .f = ~step_errormodel(fcid = ..1,
                                                          input_dir = paste0("data/",..1,"/02_filtered"),
-                                                         output = paste0("output/rds/",..1,"_errormodel.rds"),
+                                                         pcr_primers = ..2,
+                                                         output = paste0("output/rds/",..1,"_",..2,"_errormodel.rds"),
                                                          qc_dir = paste0("output/logs/",..1),
                                                          nbases=1e+08,
                                                          randomize=FALSE,
@@ -425,29 +426,30 @@ tar_target(write_postfilt_qualplots, {
                                                          quiet = FALSE,
                                                          write_all = FALSE)
       ))
-    return(paste0("output/rds/",unique(process$fcid),"_errormodel.rds"))
+    return(paste0("output/rds/",unique(process$fcid),"_", unique(process$pcr_primers),"_errormodel.rds"))
   },
   pattern = map(temp_samdf3_grouped), iteration = "vector"),
  
   # How to make it just redo one of the dadas if only one runs filtered file changed changed?
   tar_target(denoise,{
     process <- temp_samdf3_grouped %>%
-             dplyr::group_by(fcid) %>%
+             dplyr::group_by(fcid, pcr_primers) %>%
              tidyr::nest() %>%    
-             dplyr::mutate(error_model = purrr::map(fcid, ~{
-                readRDS(error_model[stringr::str_detect(error_model,  paste0(.x, "_errormodel.rds"))]) 
+             dplyr::mutate(error_model = purrr::map2(fcid,pcr_primers, ~{
+                readRDS(error_model[stringr::str_detect(error_model,  paste0(.x,"_",.y, "_errormodel.rds"))]) 
               })) %>%
-             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, error_model),
+             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, pcr_primers, error_model),
                                         .f = ~step_dada2(fcid = ..1,
                                                          input_dir = paste0("data/",..1,"/02_filtered"),
-                                                         output = paste0("output/rds/",..1,"_dada.rds"),
+                                                         pcr_primers = ..2,
+                                                         output = paste0("output/rds/",..1,"_",..2,"_dada.rds"),
                                                          qc_dir = paste0("output/logs/",..1),
-                                                         error_model = ..2,
+                                                         error_model = ..3,
                                                          pool = "pseudo",
                                                          multithread = FALSE,
                                                          quiet = FALSE)
              ))
-        return(paste0("output/rds/",unique(process$fcid),"_dada.rds"))
+        return(paste0("output/rds/",unique(process$fcid),"_", unique(process$pcr_primers),"_dada.rds"))
              },
              pattern = map(temp_samdf3_grouped), iteration = "vector"),
 
@@ -455,20 +457,21 @@ tar_target(dada,{
   process <- temp_samdf3_grouped %>%
     dplyr::select(-one_of("concat_unmerged"))%>%
     dplyr::left_join(params_dada, by="pcr_primers") %>%
-    dplyr::group_by(fcid, concat_unmerged) %>%
+    dplyr::group_by(fcid, pcr_primers, concat_unmerged) %>%
     tidyr::nest() %>%
-    dplyr::mutate(dada = purrr::map(fcid, ~{
-      readRDS(denoise[stringr::str_detect(denoise,  paste0(.x, "_dada.rds"))]) 
+    dplyr::mutate(dada = purrr::map2(fcid, pcr_primers, ~{
+      readRDS(denoise[stringr::str_detect(denoise,  paste0("output/rds/",.x,"_",.y,"_dada.rds"))]) 
     })) %>%
-    dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, concat_unmerged, dada),
+    dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, pcr_primers, concat_unmerged, dada),
                                       .f = ~step_mergereads(fcid = ..1,
                                                        input_dir = paste0("data/",..1,"/02_filtered"),
-                                                       output = paste0("output/rds/",..1,"_seqtab.rds"),
+                                                       pcr_primers = ..2,
+                                                       output = paste0("output/rds/",..1,"_", ..2,"_seqtab.rds"),
                                                        qc_dir = paste0("output/logs/",..1),
                                                        quiet = FALSE,
                                                        write_all = FALSE,
-                                                       concat_unmerged=..2,
-                                                       dada = ..3)
+                                                       concat_unmerged=..3,
+                                                       dada = ..4)
     ))
 },
 pattern = map(temp_samdf3_grouped), iteration = "vector"),
@@ -476,43 +479,45 @@ pattern = map(temp_samdf3_grouped), iteration = "vector"),
 # Return filepath for tracking
 tar_target(dada_path,
            {
-             return(paste0("output/rds/",unique(dada$fcid),"_seqtab.rds"))
+             return(paste0("output/rds/",unique(dada$fcid), "_", unique(dada$pcr_primers),"_seqtab.rds"))
            },
            pattern = map(dada), format="file", iteration = "vector"),
 
   
 ##  Merge infered variants from each run and subset to target loci ---------
- tar_target(subset_seqtab, {
-            process <- temp_samdf3 %>%
-             dplyr::ungroup() %>%
-             dplyr::group_by(pcr_primers) %>%
-             tidyr::nest() %>%
-             dplyr::mutate(subset_seqtab = purrr::map(pcr_primers, 
-                   .f = ~{
-                   if(length(dada_path) > 1){
-                   st.all <- mergeSequenceTables(tables=dada_path)
-                   } else if(length(dada_path) == 1) {
-                   st.all <- readRDS(dada_path)
-                   }
-                   st.all <- st.all[stringr::str_detect(rownames(st.all), paste0(.x, "(-|_|$)")),] # Match primer followed by underscore, dash, or EOL
-                   st.all <- st.all[,colSums(st.all) > 0]
-                   saveRDS(st.all, paste0("output/rds/",.x,"_seqtab.rds"))
-                   out <- rowSums(st.all) %>%
-                     tibble::enframe(name="fq", value="subset_seqtab_reads")
-                   return(out)
-              })) %>% 
-              tidyr::unnest(data, subset_seqtab) %>%
-              dplyr::select(sample_id, sample_name, fcid, subset_seqtab_reads)  %>%
-              dplyr::mutate(path = paste0("output/rds/",unique(pcr_primers),"_seqtab.rds"))
-            }, iteration = "vector"),
-
-
-# Return filepath for tracking
-tar_target(subset_seqtab_path,
-           {
-             return(unique(subset_seqtab$path))
-           }, format="file"),
-
+### TODO remove this now that DADA is run on each file separately
+# tar_target(subset_seqtab, {
+#            process <- temp_samdf3 %>%
+#             dplyr::ungroup() %>%
+#             dplyr::group_by(pcr_primers) %>%
+#             tidyr::nest() %>%
+#             dplyr::mutate(subset_seqtab = purrr::map(pcr_primers, 
+#                   .f = ~{
+#                   # Subset dada path to just that primer set
+#                   if(length(dada_path) > 1){
+#                   st.all <- mergeSequenceTables(tables=dada_path)
+#                   } else if(length(dada_path) == 1) {
+#                   st.all <- readRDS(dada_path)
+#                   }
+#                   st.all <- st.all[stringr::str_detect(rownames(st.all), paste0(.x, "(-|_|$)")),] # Match primer followed by underscore, dash, or EOL
+#                   st.all <- st.all[,colSums(st.all) > 0]
+#                   saveRDS(st.all, paste0("output/rds/",.x,"_seqtab.rds"))
+#                   out <- rowSums(st.all) %>%
+#                     tibble::enframe(name="fq", value="subset_seqtab_reads")
+#                   return(out)
+#              })) %>% 
+#              tidyr::unnest(data, subset_seqtab) %>%
+#              dplyr::select(sample_id, sample_name, fcid, subset_seqtab_reads)  %>%
+#              dplyr::mutate(path = paste0("output/rds/",unique(pcr_primers),"_seqtab.rds"))
+#            }, iteration = "vector"),
+#
+#
+## Return filepath for tracking
+#tar_target(subset_seqtab_path,
+#           {
+#             return(unique(subset_seqtab$path))
+#           }, format="file"),
+#
 
 #  Filter ASVs -------------------------------------------------
  tar_target(filtered_seqtab, {
@@ -522,7 +527,7 @@ tar_target(subset_seqtab_path,
            dplyr::group_by(pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
            tidyr::nest() %>%
            dplyr::mutate(subset_seqtab = purrr::map(pcr_primers, ~{
-              readRDS(subset_seqtab_path[stringr::str_detect(subset_seqtab_path,  paste0(.x, "_seqtab.rds"))]) 
+              readRDS(dada_path[stringr::str_detect(dada_path,  paste0(.x, "_seqtab.rds"))]) 
            })) %>%
            dplyr::ungroup()%>%
            dplyr::mutate(filtered_seqtab = purrr::pmap(dplyr::select(.,pcr_primers, subset_seqtab, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq),
@@ -1155,6 +1160,7 @@ tar_target(read_tracking, {
                 dplyr::select(sample_id, fcid, filtered = filter_output),
               by = c("fcid", "sample_id")) %>%
     dplyr::left_join(dada %>% 
+                ungroup()%>%
                 tidyr::unnest(dada2) %>% 
                 dplyr::select(fcid, sample_id, denoised=merged),
               by = c("fcid", "sample_id")
@@ -1228,8 +1234,8 @@ tar_target(read_tracking, {
       text = element_text(size=9, family = ""),
       axis.text = element_text(size=8, family = ""),
       legend.position = "right",
-      panel.border = element_rect(colour = "black", fill=NA, size=0.5),
-      panel.grid = element_line(size = rel(0.5)),
+      panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+      panel.grid = element_line(linewidth = rel(0.5)),
     ) +
     labs(x = "Pipeline step",
          y = "Reads retained",
