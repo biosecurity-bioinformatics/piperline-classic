@@ -27,6 +27,9 @@ tar_option_set(packages = c(
   "ngsReports",
   "taxreturn",
   "seqateurs"
+),
+imports =c(
+  "taxreturn"
 ), workspace_on_error = TRUE)
 
 # Targets pipeline
