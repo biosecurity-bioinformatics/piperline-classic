@@ -66,6 +66,17 @@
         "snow"
       ]
     },
+    "BiocVersion": {
+      "Package": "BiocVersion",
+      "Version": "3.16.0",
+      "Source": "Bioconductor",
+      "git_url": "https://git.bioconductor.org/packages/BiocVersion",
+      "git_branch": "master",
+      "git_last_commit": "c681e06",
+      "git_last_commit_date": "2022-04-26",
+      "Hash": "44c5824508b9a10e52dbb505c34fa880",
+      "Requirements": []
+    },
     "Biostrings": {
       "Package": "Biostrings",
       "Version": "2.66.0",
@@ -2823,9 +2834,9 @@
       "RemoteUsername": "alexpiper",
       "RemoteRepo": "taxreturn",
       "RemoteRef": "HEAD",
-      "RemoteSha": "45b1a771f890c75f5e0128f222bf388419a152ec",
+      "RemoteSha": "703fefaffa25c113f682d14c3bb6e7c8cd7dfc4f",
       "RemoteHost": "api.github.com",
-      "Hash": "6bfc50b4be2a678096752140e85d7bf3",
+      "Hash": "81f322d768d07c81f498aa17dcfbbf92",
       "Requirements": [
         "BiocManager",
         "Biostrings",
