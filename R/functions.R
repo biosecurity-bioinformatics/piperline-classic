@@ -875,7 +875,7 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
 }
 
 #  DADA2 ------------------------------------------------------------------
-step_errormodel <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE,
+step_errormodel <- function(fcid, input_dir, pcr_primers, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE,
                        write_all = FALSE, quiet=FALSE){
   
   input_dir <- normalizePath(input_dir)
@@ -883,11 +883,19 @@ step_errormodel <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, rando
   qc_dir <- normalizePath(qc_dir)
   filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
   filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent pcr primers
+  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
+  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
+  
   if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
+  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
   
   # Learn error rates from a subset of the samples and reads (rather than running self-consist with full dataset)
+  message(paste0("Modelling forward read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
   errF <-  dada2::learnErrors(filtFs, multithread = multithread, nbases = nbases,
                               randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
+  message(paste0("Modelling reverse read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
   errR <-  dada2::learnErrors(filtRs, multithread = multithread, nbases = nbases,
                               randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
   
@@ -911,7 +919,7 @@ step_errormodel <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, rando
   saveRDS(error_model, output)
 }
 
-step_dada2 <- function(fcid, input_dir, output, qc_dir, error_model, pool="pseudo",
+step_dada2 <- function(fcid, input_dir, pcr_primers, output, qc_dir, error_model, pool="pseudo",
                        quiet=FALSE,  multithread=FALSE){
   
   errF <- error_model[[1]]
@@ -922,17 +930,24 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, error_model, pool="pseud
   qc_dir <- normalizePath(qc_dir)
   filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
   filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent pcr primers
+  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
+  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
   if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
+  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
   
   #Denoise reads
+  message(paste0("Denoising forward reads for primers: ", pcr_primers, " and flowcell: ", fcid))
   dadaFs <- dada2::dada(filtFs, err = errF, multithread = multithread, pool = pool, verbose = TRUE)
+  message(paste0("Denoising reverse reads for primers: ", pcr_primers, " and flowcell: ", fcid))
   dadaRs <- dada2::dada(filtRs, err = errR, multithread = multithread, pool = pool, verbose = TRUE)
   
   dada <- list(dadaFs, dadaRs)
   saveRDS(dada, output)
 }
 
-step_mergereads <- function(fcid, input_dir, output, qc_dir, dada,
+step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
                         write_all = FALSE, quiet=FALSE,  multithread=FALSE, concat_unmerged=FALSE){
   
   dadaFs <- dada[[1]]
@@ -943,9 +958,15 @@ step_mergereads <- function(fcid, input_dir, output, qc_dir, dada,
   qc_dir <- normalizePath(qc_dir)
   filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
   filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent pcr primers
+  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
+  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
   if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
+  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
   
   # Merge reads
+  message(paste0("Merging forward and reverse reads for ", pcr_primers, " and flowcell: ", fcid))
   if(write_all | concat_unmerged){
     mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE, returnRejects=TRUE) 
   } else {
@@ -983,6 +1004,7 @@ step_mergereads <- function(fcid, input_dir, output, qc_dir, dada,
   # concatenate unmerged reads
   #Modified from https://github.com/benjjneb/dada2/issues/565
   if(concat_unmerged){
+    message("concat_unmerged is set to TRUE - Concatenating unmerged forward and reverse reads")
     mergers_rescued <- mergers
     for(i in 1:length(mergers)) {
       if(any(!mergers[[i]]$accept)){
