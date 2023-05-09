@@ -1,6 +1,6 @@
 ---
 title: "PipeRline"
-subtitle: "General example"
+subtitle: "Bee Health (16S + ITS) example"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
@@ -34,7 +34,7 @@ opts_chunk$set(dev = 'png')
 
 This metabarcoding pipeline is based around the targets package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
 
-This page lists the general workflow and all the options that can be adapted for your dataset.
+This page lists the workflow for the Bee Health project (16S + ITS primers)
 
 # Clone the pipeRline github repository
 
@@ -195,7 +195,7 @@ write_csv(samdf, "sample_data/Sample_info.csv")
 ```
 
 
-# Create parameters file {.tabset}
+# Create parameters file
 
 The parameters file table the respective target gene, reference databases, and filtering parameters for each primer set used to amplify the samples. As the pcr_primers column is used in the pipeline to match the parameters to the respective sample, it is critical that the primer names match those set in the previous step.
 
@@ -254,8 +254,7 @@ params <- tibble(
 write_csv(params, "sample_data/loci_params.csv")
 ```
 
-# Run pipeline {-}
-
+# Run pipeline
 
 ```{r}
 tar_make()
