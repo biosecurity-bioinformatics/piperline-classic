@@ -910,7 +910,7 @@ step_errormodel <- function(fcid, input_dir, pcr_primers, output, qc_dir, nbases
   ##output error plots to see how well the algorithm modelled the errors in the different runs
   p1 <-  dada2::plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
   p2 <-  dada2::plotErrors(errR, nominalQ = TRUE) + ggtitle(paste0(fcid, " Reverse Reads"))
-  pdf(paste0(qc_dir,"/",fcid,"_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
+  pdf(paste0(qc_dir,"/",fcid,"_", pcr_primers, "_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
     plot(p1)
     plot(p2)
   try(dev.off(), silent=TRUE)
