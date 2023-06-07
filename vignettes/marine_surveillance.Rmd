@@ -1,6 +1,6 @@
 ---
 title: "PipeRline"
-subtitle: "General example"
+subtitle: "Marine Surveillance"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
@@ -32,7 +32,7 @@ opts_chunk$set(dev = 'png')
 
 # Introduction
 
-This metabarcoding pipeline is based around the [targets](https://books.ropensci.org/targets/) package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
+This metabarcoding pipeline is based around the targets package, which is a Make-like pipeline tool for R. The benefit of this is that all the code is automatically run, and the pipeline skips costly runtime for tasks that are already up to date.
 
 This page lists the general workflow and all the options that can be adapted for your dataset.
 
@@ -47,14 +47,6 @@ cd metabarcoding
 
 # Clone the repository
 git clone https://github.com/alexpiper/piperline.git folder-name
-```
-
-## Updating the pipeline
-
-To update to the latest version of the pipeline, run the below code in the terminal.
-
-```{bash}
-git pull
 ```
 
 # Prior to analysis
@@ -72,15 +64,9 @@ For example:
          ├── CJL7D/
          
 You will also need BLAST+ installed on your computer, it can be downloaded from the [NCBI website](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download) 
-
-# Sequencing reads {.tabset}
-
-For this workflow to run, we will need some sequencing runs to work with. If you are working with MiSeq data, it is recommended that the data is demultiplexed again using bcl2fastq (see **Demultiplex MiSeq run** tab below), as the miseq does not put indexes in fasta headers by default which is required for the index swtiching calculation.
-
-If you do not yet have any data, some test sequencing reads have been hosted on Zenodo for testing purposes. The below code in the **Download example reads** tab below will download these and put them inside the data folder.
-
-## Demultiplex MiSeq run
-The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
+         
+## Demultiplex sequencing reads
+For this workflow to run, we need to first demultiplex the miseq run again as the miseq does not put indexes in fasta headers by default, and also obtain some necessary files from the sequencing folder. The below code is written for the Agriculture Victoria BASC server, and the locations will be different if you are using a different HPC cluster.
 
 ```{bash demultiplex 1 mismatch}
 #load module
@@ -92,9 +78,9 @@ ulimit -n 4000
 ###Run1
 
 #Set up input and outputs
-inputdir=/group/sequencing/210219_M03633_0489_000000000-JDYG3 #CHANGE TO YOUR SEQ RUN
-outputdir=/group/pathogens/IAWS/Projects/Metabarcoding/dros_surveillance/data/JDYG3 #CHANGE TO YOUR DATA FOLDER RUN
-samplesheet=/group/pathogens/IAWS/Projects/Metabarcoding/dros_surveillance/SampleSheet_JDYG3.csv #CHANGE TO YOUR SAMPLESHEET
+inputdir=/group/sequencing/230127_M01054_0817_000000000-KWD4N
+outputdir=/group/pathogens/IAWS/Projects/Metabarcoding/SVBS_marine_metabarcoding/data/KWD4N #CHANGE TO YOUR DATA FOLDER RUN
+samplesheet=/group/pathogens/IAWS/Projects/Metabarcoding/SVBS_marine_metabarcoding/SampleSheet_KWD4N.csv #CHANGE TO YOUR SAMPLESHEET
 
 # convert samplesheet to unix format
 dos2unix $samplesheet
@@ -125,58 +111,7 @@ done
 
 ```
 
-
-# Optional: Run R on BASC
-
-You may wish to run this workflow through the command line on Agriculture Victorias BASC server in order to take advantage of more processing power. To do this, you can start a new SLURM interactive session. Press the CODE button to the lower right to display the code for this optional step.
-
-```{bash, class.source = 'fold-hide'}
-# Create new interactive SLURM session
-sinteractive --ntasks=1 --cpus-per-task=10 --mem-per-cpu=10GB --time=72:00:00
-
-module load R/4.2.0-foss-2021b
-module load pkgconfig/1.5.1-GCCcore-9.3.0-Python-3.8.2
-module load GDAL/3.3.0-foss-2021a
-module load BLAST+/2.11.0-gompi-2020a
-module load Pandoc/2.5
-module load ZeroMQ/4.3.2-GCCcore-9.3.0
-
-# Load R
-R
-```
-
-
-
-## Download example reads
-
-Example tephritid metabarcoding reads have been hosted on [Zenodo](https://zenodo.org/record/7112162#.Y_LoBXZBz-g), either download them manually or with R below: 
-
-```{r}
-# Source the functions file which contains code to download from zenodo
-source("R/functions.R")
-
-# Create directory for data
-if(!dir.exists("data/K77JP")) {dir.create("data/K77JP", recursive = TRUE)}
-if(!dir.exists("data/K77JP/InterOp")) {dir.create("data/K77JP/InterOp", recursive = TRUE)}
-
-# Download files from zenodo
-download_zenodo(
-  doi = "10.5281/zenodo.7112162",
-  path = "data/K77JP"
-)
-
-# Move the interop files to the interop folder
-fs::dir_ls(path="data/K77JP", glob="*.bin") %>%
-  purrr::map(function(x){
-    fs::file_copy(path = x, new_path = x %>% str_replace("data/K77JP", "data/K77JP/InterOp"))
-    file.remove(x)
-  })
-```
-
-# Install and load R packages and setup directories {-}
-
-This pipeline depends on a number of other R packages which this step will install. The versions of these packages are managed using [renv](https://rstudio.github.io/renv/articles/renv.html) to ensure they match the versions the pipeline was developed on. The first time installing packages may take some time, but they should be quick to load for any future runs. 
-
+# Install and load R packages and setup directories {.tabset}
 ```{r Manual install} 
 # Load the targets and renv packages
 library(targets)
@@ -191,41 +126,9 @@ source("R/functions.R")
 source("R/themes.R")
 ```
 
-# Reference databases {.tabset}
+# Create sample tracking sheet
 
-The pipeRline workflow uses the [IDTAXA](https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-018-0521-5) and BLAST software to assign taxonomy to the sequence reads. These require a pre-trained IDTAXA model, and a fasta file with heirarchial taxonomy. For insects, these 
-
-## Download reference database
-
-Reference databases for insects and arachnids have been hosted on [Zenodo](https://zenodo.org/record/7655352#.Y_LgsHZBz-g), either download them manually, or with R below:
-
-```{r}
-# Source the functions file which contains code to download from zenodo
-source("R/functions.R")
-
-# Download files from zenodo
-download_zenodo(
-  doi = "10.5281/zenodo.7655352",
-  path = "reference"
-)
-```
-
-## Create your own reference database
-
-If you need a new database, these can be created from genbank and blast using [taxreturn](https://github.com/alexpiper/taxreturn) or other simialr database curation packages.  
-
-```{code}
->Accession|Root;Kingdom;Phylum;Class;Order;Family;Genus;Species
-ACCTAGAAAGTCGTAGATCGAAGTTGAAGCATCGCCCGATGATCGTCTGAAGCTGTAGCATGAGTCGATTTTCACATTCAGGGATACCATAGGATAC
->Root;Kingdom;Phylum;Class;Order;Family;Genus;Species
-CGCTAGAAAGTCGTAGAAGGCTCGGAGGTTTGAAGCATCGCCCGATGGGATCTCGTTGCTGTAGCATGAGTACGGACATTCAGGGATCATAGGATAC
-```
-
-The IDTAXA model can then be trained on this reference fasta - See the [IDTAXA manual](http://www2.decipher.codes/Documentation/Documentation-ClassifySequences.html)
-
-# Create sample tracking sheet {-}
-
-In order to track samples and relevant QC statistics throughout the metabarcoding pipeline, we will first create a new sample tracking sheet from our input illumina samplesheets. This function requires both the SampleSheet.csv used for the sequencing run, and the runParameters.xml, both of which should have been automatically obtained from the demultiplexed sequencing run folder in the bash step above
+In order to track samples and relevant QC statistics throughout the metabarcoding pipeline, we will first create a new samplesheet from our input samplesheets. This function requires both the SampleSheet.csv used for the sequencing run, and the runParameters.xml, both of which should have been automatically obtained from the demultiplexed sequencing run folder in the bash step above
 
 ```{r create samplesheet}
 runs <- dir("data/") #Find all directories within data
@@ -279,49 +182,15 @@ If different primers were used for different samples, these can be set using pat
 
 If multiple primer sets are used per sample, before indexing, the pipeline will conduct an extra round of demultiplexing to split each sample by primer. This option can be set by splitting each primer set with a semicolon (**tab 3**) 
 
-## Single primer set
-
-```{R}
-# Add primers to sample sheet
-samdf <- samdf %>%
-  mutate(pcr_primers = "fwhF2-fwhR2n",
-  for_primer_seq = "GGDACWGGWTGAACWGTWTAYCCHCC",
-  rev_primer_seq = "GTRATWGCHCCDGCTARWACWGG"
-  )
-
-write_csv(samdf, "sample_data/Sample_info.csv")
-```
-
-## Different primer sets per sample
-
-```{R}
-# Add PCR primers to sample sheet
-samdf <- samdf %>%
-  mutate(pcr_primers = case_when(
-    str_detect(sample_name, "primer1") ~ "fwhF2-fwhR2n",
-    str_detect(sample_name, "primer2") ~ "EIF3LminiF4-EIF3lminiR4"
-  ),
-  for_primer_seq = case_when(
-    str_detect(sample_name, "primer1") ~ "GGDACWGGWTGAACWGTWTAYCCHCC",
-    str_detect(sample_name, "primer2") ~ "GATGCGYCGTTATGCYGATGC"
-  ),
-  rev_primer_seq = case_when(
-    str_detect(sample_name, "primer1") ~ "GTRATWGCHCCDGCTARWACWGG",
-    str_detect(sample_name, "primer2") ~ "TTRAAYACTTCYARATCRCC"
-  ))
-
-write_csv(samdf, "sample_data/Sample_info.csv")
-```
-
 ## Multiple primer sets per sample
 
 ```{R}
 # Add PCR primers to sample sheet
 samdf <- samdf %>%
   mutate(
-    pcr_primers = "fwhF2-fwhR2nDac;EIF3LminiF4-EIF3lminiR4",
-    for_primer_seq = "GGDACWGGWTGAACWGTWTAYCCHCC;GATGCGYCGTTATGCYGATGC",
-    rev_primer_seq = "GTRATWGCHCCIGCTAADACHGG;TTRAAYACTTCYARATCRCC"
+    pcr_primers = "mlCOIintF-jgHCO2198;Uni18S-Uni18SR",
+    for_primer_seq = "GGWACWGGWTGAACWGTWTAYCCYCC;AGGGCAAKYCTGGTGCCAGC",
+    rev_primer_seq = "TAIACYTCIGGRTGICCRAARAAYCA;GRCGGTATCTRATCGYCTT"
     )
 
 write_csv(samdf, "sample_data/Sample_info.csv")
@@ -345,7 +214,7 @@ If multiple primer reference databases are to be used for each sample, these can
     + **target_gene** - Name of target gene
     + **max_primer_mismatch** - How much mismatch to allow when detecting primer sequences
 
-* **Read filtering:**
+* **Read filterign:**
     + **read_min_length** - Minimum length of primer trimmed reads
     + **read_max_length** - Maximum length of primer trimmed reads
     + **read_max_ee** - Maximum expected errors of primer trimmed reads
@@ -367,7 +236,6 @@ If multiple primer reference databases are to be used for each sample, these can
     + **idtaxa_confidence** - Minimum bootstrap confidence for IDTAXA
     + **run_blast** - Whether a blast top hit search should be conducted in addition to IDTAXA
     + **blast_min_identity** - Minimum nucleotide identity for BLAST
-    + **blast_min_coverage** - Minimum query coverage for BLAST
     + **target_kingdom** - Subset to target kingdom
     + **target_phylum** - Subset to target phylum
     + **target_class** - Subset to target class
@@ -381,167 +249,70 @@ If multiple primer reference databases are to be used for each sample, these can
     + **min_taxa_reads** - Minimum reads per ASV to retain
     + **min_taxa_ra** - Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
 
-## Single primer set
-
-```{R}
-# Params to add in step_add_parameters
-params <- tibble(
-  # Primer parameters
-  pcr_primers = "fwhF2-fwhR2n",
-  target_gene="COI",
-  max_primer_mismatch=0,
-
-  # Read filtering
-  read_min_length = 20,
-  read_max_length = Inf,
-  read_max_ee = 1,
-  read_trunc_length = 150,
-  read_trim_left = 0, 
-  read_trim_right = 0,
-  
-  # ASV filtering
-  asv_min_length = 195, 
-  asv_max_length = 215,
-  concat_unmerged = FALSE,
-  genetic_code = "SGC4",
-  coding = TRUE,
-  phmm = "reference/folmer_fullength_model.rds",
-  
-  # Taxonomic assignment
-  idtaxa_db = "reference/idtaxa_bftrimmed.rds",
-  ref_fasta = "reference/insecta_hierarchial_bftrimmed.fa.gz",
-  idtaxa_confidence = 60,
-  run_blast=TRUE,
-  blast_min_identity = 97,
-  blast_min_coverage = 90,
-  target_kingdom = "Metazoa",
-  target_phylum = "Arthropoda",
-  target_class = NA,
-  target_order = NA,
-  target_family = NA,
-  target_genus = NA,
-  target_species= NA,
-  
-  # Sample & Taxon filtering
-  min_sample_reads = 1000,
-  min_taxa_reads= NA,
-  min_taxa_ra = 1e-4, #1e-4 is 0.01%
-)
-
-write_csv(params, "sample_data/loci_params.csv")
-```
-
 ## Different or multiple primer sets per sample
 
 ```{R}
 # Params to add in step_add_parameters
 params <- tibble(
-  # Primer parameters
-  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
-  target_gene=c("COI", "EIF3L"),
-  max_primer_mismatch=1,
-
-  # Read filtering
-  read_min_length = 20,
-  read_max_length = Inf,
-  read_max_ee = 1,
-  read_trunc_length = 150,
-  read_trim_left = 0,
-  read_trim_right = 0,
-  
-  # ASV filtering
-  asv_min_length = c(195, 207),
-  asv_max_length = c(215, 227),
-  genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE),
-  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
-  
-  # Taxonomic assignment
-  idtaxa_db = c("reference/COI_idtaxa.rds","reference/EIF3L_idtaxa.rds"),
-  ref_fasta = c("reference/COI_hierarchial.fa.gz", "reference/EIF3L_hierarchial.fa.gz"),
-  idtaxa_confidence = 60,
-  run_blast=TRUE,
-  blast_min_identity = 97,
-  blast_min_coverage = 90,
-  target_kingdom = c("Metazoa", "Metazoa"),
-  target_phylum = c("Arthropoda","Arthropoda"),
-  target_class = NA,
-  target_order = NA,
-  target_family = NA, 
-  target_genus = NA,  
-  target_species= NA,  
-  
-  # Sample & Taxon filtering
-  min_sample_reads = c(1000, 1000),
-  min_taxa_reads= NA, 
-  min_taxa_ra = c(1e-4, 1e-4),
-)
-
-write_csv(params, "sample_data/loci_params.csv")
-```
-
-## Multiple reference databases
-
-```{r}
-params <- tibble(
-  # Primer parameters
-  pcr_primers = c("fwhF2-fwhR2nDac", "EIF3LminiF4-EIF3lminiR4"),
-  target_gene=c("COI", "EIF3L"),
+  # Amplicon parameters
+  pcr_primers = c("mlCOIintF-jgHCO2198", "Uni18S-Uni18SR"),
+  target_gene=c("COI", "18S"),
   max_primer_mismatch=0,
 
   # Read filtering
   read_min_length = 20,
   read_max_length = Inf,
   read_max_ee = 1,
-  read_trunc_length = 150,
+  read_trunc_length = 224,
   read_trim_left = 0,
   read_trim_right = 0,
   
   # ASV filtering
-  asv_min_length = c(195, 207),
-  asv_max_length = c(215, 227),
+  asv_min_length = c(303, 50), #MtCOIintF-jgHCO2198 = 313bp
+  asv_max_length = c(323, 500),
+  concat_unmerged = TRUE,
   genetic_code = c("SGC4", "SGC0"),
-  coding = c(TRUE, TRUE),
-  phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
+  coding = c(TRUE, FALSE),
+  phmm = NA_character_,
   
   # Taxonomic assignment
-  idtaxa_db = c("reference/COI_internal_idtaxa.rds;reference/COI_idtaxa.rds",
-             "reference/EIF3L_internal_idtaxa.rds;reference/EIF3L_idtaxa.rds"),
-  ref_fasta = c("reference/COI_internal.fa.gz;reference/COI_hierarchial.fa.gz",
-               "reference/EIF3L_internal.fa.gz;reference/EIF3L_hierarchial.fa.gz"),
+  idtaxa_db = c("reference/COI_idtaxa.rds","reference/18S_idtaxa.rds"),
+  ref_fasta = c("reference/COI_hierarchial.fa.gz", "reference/18S_hierarchial.fa.gz"),
   idtaxa_confidence = 60,
   run_blast=TRUE,
   blast_min_identity = 97,
   blast_min_coverage = 90,
-  target_kingdom = c("Metazoa", "Metazoa"),
-  target_phylum = c("Arthropoda","Arthropoda"),
-  target_class = NA,
-  target_order = NA,
-  target_family = NA, 
-  target_genus = NA,  
-  target_species= NA,  
+  target_kingdom = NA_character_,
+  target_phylum = NA_character_,
+  target_class = NA_character_,
+  target_order = NA_character_,
+  target_family = NA_character_, 
+  target_genus = NA_character_,  
+  target_species= NA_character_,  
   
   # Sample & Taxon filtering
-  min_sample_reads = c(1000, 1000),
-  min_taxa_reads= NA,
-  min_taxa_ra = c(1e-4, 1e-4),
+  min_sample_reads = 0,
+  min_taxa_reads= 0, # Minimum reads per ASV to retain
+  min_taxa_ra = 0, # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
 )
 
 write_csv(params, "sample_data/loci_params.csv")
 ```
 
 # Run pipeline {-}
-Now that the sample data sheet and parameters are defined, the pipeline steps can now be run automatically using the tar_make() command
+Now that the sample data sheet and parameters are defined, the pipeline steps can now be visualised, and then run automatically.
+
 
 ```{r}
 tar_make()
 ```
 
+
 # Results
 
 After the run, two directories should have been made within the output folder, output/results/unfiltered which contains the results before any taxonomic subsetting, sample minimum abundance, and ASV minimum abundance filtering, and output/results/filtered containing the results after these steps. Within each of these folders there should be a series of outputs:
 
-* **seqtab.csv** - This lists the abundance of each ASV and the sample it was detected in
+* **samdf.csv** - This lists the abundance of each ASV and the sample it was detected in
 
 * **taxtab.csv** - This lists the heirarchial taxonomy assigned to each ASV
 
@@ -566,7 +337,7 @@ The pipeline also outputs some quality control plots that should be checked to e
 
     + **output/logs/FCID/FCID_prefilt_qualplots.pdf** - This multiplot summarises the read quality scores for the forward and reverse reads, pre filtering. These plots can serve as an indicator for adjusting read filtering parameters of the pipeline. The top two plots summarise the mean quality score by position for the forward and reverse reads respectively. For illumina data, these will start to decrease towards the end of the reads, particularly for the reverse reads. The two bottom plots show the cumulative expected errors along the reads, with different coloured dots for different quantiles of the read data (i.e. lower 10% to upper 90%). The red lines show the potential max expecter error cutoffs, with all reads above the set maximum expected error filter beign removed (param read_max_ee). For example, if the lower 10% quantile of reads goes above the red line for maxEE=1, you would expect 10% of the reads to be removed if read_max_ee was set to 1. As more errors commonly occur in the ends of the read, if there is sufficient overlap between the reads to cover the length of the amplicon, the reads could instead be truncated to smaller lengths to reduce the amount of reads that cross this minimum expected error filter which would retain more data. Note that when truncating reads you should aim to have at least 20bp of overlap to facilitate forward and reverse read merging. 
     
-    + **output/logs/FCID/FCID_postfilt_qualplots.pdf** - This multiplot summarises the read quality scores for the forward and reverse reads, pre filtering. These plots list the same information as the pre-filtering quality plots, and should be checked to ensure that the filtering has been correctly applied. i.e., if reads were truncated or trimmed on the left or right (params read_trunc_length, read_trim_left, read_trim_right) they should be shorter then the pre-filter plots, and if a maximum expected error filter (param read_max_ee) was applied, none of the EE quantiles should be above the corresponding red line
+    + **output/logs/FCID/FCID_prefilt_qualplots.pdf** - This multiplot summarises the read quality scores for the forward and reverse reads, pre filtering. These plots list the same information as the pre-filtering quality plots, and should be checked to ensure that the filtering has been correctly applied. i.e., if reads were truncated or trimmed on the left or right (params read_trunc_length, read_trim_left, read_trim_right) they should be shorter then the pre-filter plots, and if a maximum expected error filter (param read_max_ee) was applied, none of the EE quantiles should be above the corresponding red line
 
     + **output/logs/FCID/FCID_errormodel.pdf** - This plot summarises the error model used for dada2 that was inferred from the data for the respective flow cell. The error rates for each possible transition (A→C, A→G, etc) are shown in each subplot. The dot-points are the error rates observed in the data for each quality score. The black line shows the estimated error rates from the machine-learning algorithm. The red line shows the error rates that would be expected if the Q-scores assigned by the sequencer were completely accurate. This plot can be more subjective to interpret, but generally you want to see the estimated error rates (black line) decrease as the quality score (x axis) increases, in a relatively linear fashion. Minor humps in the black line are no problem, but a very jagged line may indicate that the error model did not fit correctly. Note: for NextSeq and NovaSeq data, the binned quality scores provided by the sequencer can cause large humps or dips in the error model fit. This is generally not a big problem, see [this github issue](https://github.com/benjjneb/dada2/issues/1307) for a deeper discussion on fitting error models for binned quality scores.
 

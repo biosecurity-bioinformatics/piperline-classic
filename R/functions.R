@@ -19,7 +19,7 @@ step_demux_samdf <- function(samdf){
                    sample_id = paste0(sample_id, "_",pcr_primers)
             ) 
         }
-        if(!all(stringr::str_detect(x$sample_id, x$pcr_primers))){
+        if(!all(stringr::str_detect(x$sample_id ,paste0(x$pcr_primers, "$")))){
           x <- x %>%
             dplyr::mutate(sample_id = paste0(sample_id, "_",pcr_primers))
         }
@@ -187,6 +187,15 @@ step_seq_qc <- function(fcid, quiet=FALSE, write_all=FALSE){
   
   ## Sequencing run quality check using savR
   fc <- savR::savR(seq_dir)
+  
+  # Ensure indices are present
+  if(length(fc@parsedData)==0){
+    warning(paste0("Flow cell metrics could not be parsed for", fcid, " skipping seq run qc"))
+    out <- tibble(fcid = fcid,
+                  reads_pf = NA_integer_,
+                  reads_total = NA_integer_)
+    return(out)
+  }
   
   if(write_all){
     readr::write_csv(savR::correctedIntensities(fc), normalizePath(paste0(qc_dir, "/correctedIntensities.csv")))
@@ -866,21 +875,27 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
 }
 
 #  DADA2 ------------------------------------------------------------------
-
-
-step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE, pool="pseudo",
-                       write_all = FALSE, quiet=FALSE, concat_unmerged=FALSE){
+step_errormodel <- function(fcid, input_dir, pcr_primers, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE,
+                       write_all = FALSE, quiet=FALSE){
   
   input_dir <- normalizePath(input_dir)
   output <- normalizePath(output)
   qc_dir <- normalizePath(qc_dir)
   filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
   filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent pcr primers
+  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
+  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
+  
   if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
+  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
   
   # Learn error rates from a subset of the samples and reads (rather than running self-consist with full dataset)
+  message(paste0("Modelling forward read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
   errF <-  dada2::learnErrors(filtFs, multithread = multithread, nbases = nbases,
                               randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
+  message(paste0("Modelling reverse read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
   errR <-  dada2::learnErrors(filtRs, multithread = multithread, nbases = nbases,
                               randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
   
@@ -895,16 +910,63 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   ##output error plots to see how well the algorithm modelled the errors in the different runs
   p1 <-  dada2::plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
   p2 <-  dada2::plotErrors(errR, nominalQ = TRUE) + ggtitle(paste0(fcid, " Reverse Reads"))
-  pdf(paste0(qc_dir,"/",fcid,"_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
-  plot(p1)
-  plot(p2)
+  pdf(paste0(qc_dir,"/",fcid,"_", pcr_primers, "_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
+    plot(p1)
+    plot(p2)
   try(dev.off(), silent=TRUE)
   
+  error_model <- list(errF, errR)
+  saveRDS(error_model, output)
+}
+
+step_dada2 <- function(fcid, input_dir, pcr_primers, output, qc_dir, error_model, pool="pseudo",
+                       quiet=FALSE,  multithread=FALSE){
+  
+  errF <- error_model[[1]]
+  errR <- error_model[[2]]
+  
+  input_dir <- normalizePath(input_dir)
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
+  filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
+  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent pcr primers
+  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
+  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
+  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
+  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
+  
   #Denoise reads
+  message(paste0("Denoising forward reads for primers: ", pcr_primers, " and flowcell: ", fcid))
   dadaFs <- dada2::dada(filtFs, err = errF, multithread = multithread, pool = pool, verbose = TRUE)
+  message(paste0("Denoising reverse reads for primers: ", pcr_primers, " and flowcell: ", fcid))
   dadaRs <- dada2::dada(filtRs, err = errR, multithread = multithread, pool = pool, verbose = TRUE)
   
+  dada <- list(dadaFs, dadaRs)
+  saveRDS(dada, output)
+}
+
+step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
+                        write_all = FALSE, quiet=FALSE,  multithread=FALSE, concat_unmerged=FALSE){
+  
+  dadaFs <- dada[[1]]
+  dadaRs <- dada[[2]]
+  
+  input_dir <- normalizePath(input_dir)
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
+  filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
+  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent pcr primers
+  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
+  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
+  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
+  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
+  
   # Merge reads
+  message(paste0("Merging forward and reverse reads for ", pcr_primers, " and flowcell: ", fcid))
   if(write_all | concat_unmerged){
     mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose = TRUE, minOverlap = 12, trimOverhang = TRUE, returnRejects=TRUE) 
   } else {
@@ -942,6 +1004,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   # concatenate unmerged reads
   #Modified from https://github.com/benjjneb/dada2/issues/565
   if(concat_unmerged){
+    message("concat_unmerged is set to TRUE - Concatenating unmerged forward and reverse reads")
     mergers_rescued <- mergers
     for(i in 1:length(mergers)) {
       if(any(!mergers[[i]]$accept)){
@@ -973,7 +1036,7 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
   
   #Construct sequence table
   sample_names <- basename(filtFs) %>% stringr::str_remove("_S[0-9]+_R[1-2]_.*$")
-  seqtab <- makeSequenceTable(mergers_rescued)
+  seqtab <- makeSequenceTable(mergers)
   saveRDS(seqtab, output)
   
   # Track reads
@@ -992,8 +1055,8 @@ step_dada2 <- function(fcid, input_dir, output, qc_dir, nbases=1e+08, randomize=
 
 # Group by target loci and apply
 step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max_length = NULL, 
-                            check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
-
+                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
+  
   # Handle NA inputs
   if(is.na(min_length)){min_length <- NULL}
   if(is.na(max_length)){max_length <- NULL}
@@ -1010,12 +1073,50 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   }
   reads_starting <- rowSums(seqtab)
   
+  # Load in profile hidden markov model if provided
+  if(is.character(phmm) && stringr::str_detect(phmm, ".rds")){
+    phmm_model <- readRDS(phmm)
+  } else if (is(phmm, "PHMM")){
+    phmm_model <- phmm
+  } else {
+    phmm_model <- NULL
+  }
+  
+  # subset PHMM if primers were provided
+  if (is(phmm_model, "PHMM") && !is.null(primers)){
+    # Check that one of the two primers can bind
+    Fbind <- get_binding_position(primers[1], model = phmm_model, tryRC = TRUE, min_score = 10)
+    Rbind <- get_binding_position(primers[2], model = phmm_model, tryRC = TRUE, min_score = 10)
+    if(!is.na(Fbind$start) & !is.na(Rbind$start)){
+      phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
+    } else  if(!is.na(Fbind$start) & is.na(Rbind$start)){
+      # Reverse primer not found - Try with subsets
+      for(r in seq(1, nchar(primers[2])-10, 1)){ #Minimum length of 10 as this has to match minscore
+        Rbind <- get_binding_position(str_remove(primers[2], paste0("^.{1,",r,"}")), model = phmm_model, tryRC = TRUE, min_score = 10)
+        if (!is.na(Rbind$start)) {
+          primers[2] <- str_remove(primers[2], paste0("^.{1,",r,"}"))
+          break
+        }
+      }
+      phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
+    } else  if(is.na(Fbind$start) & !is.na(Rbind$start)){
+      # Forward primer not found - Try with subsets
+      for(r in seq(1, nchar(primers[1])-10, 1)){ #Minimum length of 10 as this has to match minscore
+        Rbind <- get_binding_position(str_remove(primers[1], paste0("^.{1,",r,"}")), model = phmm_model, tryRC = TRUE, min_score = 10)
+        if (!is.na(Rbind$start)) {
+          primers[1] <- str_remove(primers[1], paste0("^.{1,",r,"}"))
+          break
+        }
+      }
+      phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
+    }
+  }
   # Remove chimeras  
   seqtab_nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=multithread, verbose=!quiet)
   if(!quiet){message(paste(sum(seqtab_nochim)/sum(seqtab),"of starting abundance remaining after chimera removal"))}
   reads_chimerafilt <- rowSums(seqtab_nochim)
   
-  #cut to expected size allowing for some codon indels - do separately for each loci
+  # cut to expected size
   if(any(!is.null(c(min_length, max_length)), na.rm = TRUE) & any(reads_chimerafilt > 0)){
     if(!is.null(min_length) & !is.null(max_length)){
       seqtab_cut <- seqtab_nochim[,nchar(colnames(seqtab_nochim)) %in% min_length:max_length]
@@ -1034,20 +1135,6 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
     seqtab_cut <- seqtab_nochim
     reads_lengthfilt <- rep(0,nrow(seqtab)) 
     names(reads_lengthfilt) <- rownames(seqtab)
-  }
-  
-  # Load in profile hidden markov model if provided
-  if(is.character(phmm) && stringr::str_detect(phmm, ".rds")){
-    phmm_model <- readRDS(phmm)
-  } else if (is(phmm, "PHMM")){
-    phmm_model <- phmm
-  } else {
-    phmm_model <- NULL
-  }
-  
-  # subset PHMM if primers were provided
-  if (is(phmm_model, "PHMM") && !is.null(primers)){
-    phmm_model <- taxreturn::subset_model(phmm_model, primers = primers)
   }
   
   # Align against phmm
@@ -1106,14 +1193,25 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
       !OTU %in% getSequences(seqtab_phmm) ~ "PHMM",
       !OTU %in% getSequences(seqtab_final) ~ "Stop codons",
       TRUE ~ "Retained"
-    )) 
-  write_csv(cleanup, paste0(qc_dir,"/ASV_cleanup_summary.csv"))
+    )) %>%
+    dplyr::mutate(concat = str_detect(OTU, "NNNNNNNNNN")) %>%
+    dplyr::mutate(type = case_when(
+      concat ~ paste0("Unmerged-", type),
+      TRUE ~ type
+    )) %>%
+    dplyr::mutate(pcr_primers = pcr_primers) %>%
+    dplyr::select(-concat)
   
-  cols <- c(`Chimera` = "#d7191c",
-            `Incorrect size` = "#fdae61",
-            `PHMM` = "#ffffbf",
+  cols <- c(`Chimera` = "#9e0142",
+            `Unmerged-Chimera` = "#d53e4f",
+            `Incorrect size` = "#f46d43",
+            `Unmerged-Incorrect size` = "#fdae61",
+            `PHMM` = "#fee08b",
+            `Unmerged-PHMM` = "#e6f598",
             `Stop codons` = "#abdda4",
-            `Retained` = "#2b83ba") 
+            `Unmerged-Stop codons` = "#66c2a5",
+            `Retained` = "#3288bd",
+            `Unmerged-Retained` = "#5e4fa2") 
   
   # Output length distribution plots
   gg.abundance <- ggplot2::ggplot(cleanup, aes(x=length, y=log10(Abundance), fill=type))+
@@ -1164,7 +1262,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   
   # Create combined plot
   out_plot <- gg.abundance / gg.unique
-
+  
   # Create output
   res <- tibble(
     sample_id = rownames(seqtab) %>% stringr::str_remove(pattern="_S[0-9]+_R[1-2]_.*$"),
@@ -1177,6 +1275,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   )
   return(list(filtered_seqtab = seqtab_final, 
               filtered_asvs = res,
+              cleanup_summary = cleanup,
               plot = list(out_plot)))
 }
 
