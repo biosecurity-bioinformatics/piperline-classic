@@ -1674,6 +1674,7 @@ step_filter_phyloseq <- function(ps, kingdom = NA, phylum = NA, class = NA,
   } else {
     if (!quiet){message(paste0("No minimum sample reads filter set - skipping this filter"))}
     ps2 <- ps1 %>%
+      prune_samples(sample_sums(.)>=0,.) %>%
       filter_taxa(function(x) mean(x) > 0, TRUE) #Drop missing taxa from table
   }
   
