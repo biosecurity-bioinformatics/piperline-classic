@@ -114,19 +114,28 @@ list(
       }
     }
     
-    # Check idtaxa db exists
-    for(i in seq_along(params_df$idtaxa_db[!is.na(params_df$idtaxa_db)])){
-    assertthat::is.readable(params_df$idtaxa_db[!is.na(params_df$idtaxa_db)][i])
+    # Check idtaxa db exists - Needs to handle multiple dbs
+    check_paths <- params_df$idtaxa_db[!is.na(params_df$idtaxa_db)]%>%
+      stringr::str_split(pattern=";", n=Inf) %>% 
+      unlist()
+    for(i in seq_along(check_paths)){
+    assertthat::is.readable(check_paths[i])
     }
     
     # Check fasta exists
-    for(i in seq_along(params_df$ref_fasta[!is.na(params_df$ref_fasta)])){
-      assertthat::is.readable(params_df$ref_fasta[!is.na(params_df$ref_fasta)][i])
+    check_paths <- params_df$ref_fasta[!is.na(params_df$ref_fasta)] %>%
+      stringr::str_split(pattern=";", n=Inf) %>% 
+      unlist()
+    for(i in seq_along(check_paths)){
+      assertthat::is.readable(check_paths[i])
     }
     
     # Check phmm exists
-    for(i in seq_along(params_df$phmm[!is.na(params_df$phmm)])){
-      assertthat::is.readable(params_df$phmm[!is.na(params_df$phmm)][i])
+    check_paths <- params_df$phmm[!is.na(params_df$phmm)] %>%
+      stringr::str_split(pattern=";", n=Inf) %>% 
+      unlist()
+    for(i in seq_along(check_paths)){
+      assertthat::is.readable(check_paths[i])
     }
     return(params_df)
     }, tidy_eval = FALSE
