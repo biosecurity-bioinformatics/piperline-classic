@@ -947,6 +947,44 @@ step_dada2 <- function(fcid, input_dir, pcr_primers, output, qc_dir, error_model
   saveRDS(dada, output)
 }
 
+
+step_dada2_single <- function(fcid, sample_id, input_dir, pcr_primers, output, qc_dir, error_model,
+                              priors_fwd = NA, priors_rev = NA, quiet=FALSE,  multithread=FALSE){
+  
+  errF <- error_model[[1]]
+  errR <- error_model[[2]]
+  
+  input_dir <- normalizePath(input_dir)
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
+  filtFs <- list.files(input_dir, pattern= "*R1_001.*", full.names = TRUE)
+  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+  
+  # Subset fastqs to just the relevent sample_id
+  filtFs <- filtFs[str_detect(filtFs, sample_id)]
+  filtRs <- filtRs[str_detect(filtRs, sample_id)]
+  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",sample_id," do not match."))
+
+  # Handle priors
+  if(length(priors_fwd) == 1 && is.na(priors_fwd)){
+    priors_fwd <- character(0)
+  }
+  if(length(priors_rev) == 1 && is.na(priors_rev)){
+    priors_rev <- character(0)
+  }
+  #Denoise reads
+  message(paste0("Denoising forward and reverse reads for sample: ", sample_id))
+  if(length(priors_fwd) > 1 | length(priors_rev) > 1){
+    message("High Sensitivity mode set: Using prior sequences to refine ASV inference")
+  }
+  dadaFs <- dada2::dada(filtFs, err = errF, multithread = multithread, priors = priors_fwd, selfConsist = FALSE, pool = FALSE, verbose = TRUE)
+  dadaRs <- dada2::dada(filtRs, err = errR, multithread = multithread, priors = priors_rev, selfConsist = FALSE, pool = FALSE, verbose = TRUE)
+  
+  dada <- list(dadaFs, dadaRs)
+  saveRDS(dada, output)
+}
+
+
 step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
                         write_all = FALSE, quiet=FALSE,  multithread=FALSE, concat_unmerged=FALSE){
   

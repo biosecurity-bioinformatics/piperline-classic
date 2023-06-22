@@ -289,6 +289,7 @@ params <- tibble(
   # ASV filtering
   asv_min_length = 195, 
   asv_max_length = 215,
+  high_sensitivity = TRUE,
   concat_unmerged = FALSE,
   genetic_code = "SGC4",
   coding = TRUE,
@@ -323,6 +324,10 @@ Now that the sample data sheet and parameters are defined, the pipeline steps ca
 
 ```{r}
 tar_make()
+
+# Alternatively run in background
+tar_make(callr_function = callr::r_bg, reporter = "silent")
+tar_poll()
 ```
 
 # Results

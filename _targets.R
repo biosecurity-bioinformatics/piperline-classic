@@ -26,11 +26,18 @@ tar_option_set(packages = c(
   "dada2",
   "ngsReports",
   "taxreturn",
-  "seqateurs"
+  "seqateurs",
+  "mirai",
+  "crew",
+  "nanonext"
 ),
 imports =c(
   "taxreturn"
-), workspace_on_error = TRUE)
+),
+controller = crew::crew_controller_local(
+  workers = 3,
+  seconds_idle = 3),
+workspace_on_error = TRUE)
 
 # Targets pipeline
 list(
@@ -66,6 +73,7 @@ list(
                    read_trunc_length = 0,
                    read_trim_left = 0,
                    read_trim_right = 0,
+                   high_sensitivity = TRUE,
                    asv_min_length = 0,
                    asv_max_length = Inf,
                    concat_unmerged = FALSE,
@@ -166,7 +174,7 @@ list(
   tar_file(params_dada_path,{
     out <- "output/temp/params_dada.csv"
     params %>% 
-      dplyr::select(pcr_primers, target_gene, concat_unmerged) %>%
+      dplyr::select(pcr_primers, target_gene, concat_unmerged, high_sensitivity) %>%
       write_csv(out)
     return(out)
   }),
@@ -420,6 +428,9 @@ tar_target(write_postfilt_qualplots, {
 
   # Group temporary samdf by fcid
   tar_group_by(temp_samdf3_grouped, temp_samdf3, fcid, pcr_primers),
+  
+  # Group temporary samdf by sample_ids
+  tar_group_by(temp_samdf3_grouped_sample, temp_samdf3, fcid, pcr_primers, sample_id),
 
   # TODO: make it just redo one of the dadas if only one runs filtered file changed changed?
   tar_target(error_model,{
@@ -439,32 +450,102 @@ tar_target(write_postfilt_qualplots, {
                                                          write_all = FALSE)
       ))
     return(paste0("output/rds/",unique(process$fcid),"_", unique(process$pcr_primers),"_errormodel.rds"))
-  },
-  pattern = map(temp_samdf3_grouped), iteration = "vector"),
+  }, format="file", pattern = map(temp_samdf3_grouped), iteration = "vector"),
  
   # How to make it just redo one of the dadas if only one runs filtered file changed changed?
   tar_target(denoise,{
-    process <- temp_samdf3_grouped %>%
-             dplyr::group_by(fcid, pcr_primers) %>%
+    process <- temp_samdf3_grouped_sample %>%
+             dplyr::group_by(fcid, pcr_primers, sample_id) %>%
              tidyr::nest() %>%    
              dplyr::mutate(error_model = purrr::map2(fcid,pcr_primers, ~{
                 readRDS(error_model[stringr::str_detect(error_model,  paste0(.x,"_",.y, "_errormodel.rds"))]) 
               })) %>%
-             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, pcr_primers, error_model),
-                                        .f = ~step_dada2(fcid = ..1,
+             dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, pcr_primers, error_model, sample_id),
+                                        .f = ~step_dada2_single(fcid = ..1,
                                                          input_dir = paste0("data/",..1,"/02_filtered"),
+                                                         sample_id= ..4,
                                                          pcr_primers = ..2,
-                                                         output = paste0("output/rds/",..1,"_",..2,"_dada.rds"),
+                                                         output = paste0("output/rds/",..1,"_",..2,"_", ..4,"_dada1.rds"),
                                                          qc_dir = paste0("output/logs/",..1),
                                                          error_model = ..3,
-                                                         pool = "pseudo",
                                                          multithread = FALSE,
                                                          quiet = FALSE)
              ))
-        return(paste0("output/rds/",unique(process$fcid),"_", unique(process$pcr_primers),"_dada.rds"))
-             },
-             pattern = map(temp_samdf3_grouped), iteration = "vector"),
+        return(paste0("output/rds/",unique(process$fcid),"_", unique(process$pcr_primers),"_",  unique(process$sample_id),"_dada1.rds"))
+             }, format="file", pattern = map(temp_samdf3_grouped_sample), iteration = "vector"),
 
+# Extract priors from all
+tar_target(priors,{
+  process <- temp_samdf3_grouped_sample %>%
+    dplyr::group_by(fcid, pcr_primers, sample_id)  %>%
+    tidyr::nest() %>%    
+    dplyr::mutate(priors_fwd = purrr::pmap(list(fcid, pcr_primers, sample_id), ~{
+      readRDS(denoise[stringr::str_detect(denoise,  paste0(..1,"_",..2,"_",..3,"_dada1.rds"))])[[1]]$sequence
+    }))%>%    
+    dplyr::mutate(priors_rev = purrr::pmap(list(fcid, pcr_primers, sample_id), ~{
+      list(readRDS(denoise[stringr::str_detect(denoise,  paste0(..1,"_",..2,"_",..3,"_dada1.rds"))])[[2]]$sequence)
+    }))
+  # Only keep the ones that appear across more than one sample
+  priors_fwd <- unlist(process$priors_fwd)
+  priors_fwd <- names(table(priors_fwd))[table(priors_fwd) > 1]
+  
+  priors_rev <- unlist(process$priors_rev)
+  priors_rev <- names(table(priors_rev))[table(priors_rev) > 1]
+  
+  # TODO: Merge with any input_priors
+
+  saveRDS(list(priors_fwd =priors_fwd, priors_rev = priors_rev), "output/rds/priors.rds")
+  return("output/rds/priors.rds")
+}, format="file"),
+
+# Run second round of denoising using priors
+tar_target(denoise2,{
+  process <- temp_samdf3_grouped_sample %>%
+    dplyr::select(-one_of("high_sensitivity"))%>%
+    dplyr::left_join(params_dada, by="pcr_primers") %>%
+    dplyr::group_by(fcid, pcr_primers, sample_id, high_sensitivity) %>%
+    tidyr::nest() %>%    
+    dplyr::mutate(error_model = purrr::map2(fcid,pcr_primers, ~{
+      readRDS(error_model[stringr::str_detect(error_model,  paste0(.x,"_",.y, "_errormodel.rds"))]) 
+    })) %>%   
+    dplyr::mutate(priors_fwd = list(readRDS(priors)[[1]]),
+                  priors_rev = list(readRDS(priors)[[2]])) %>%
+    dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, pcr_primers, error_model, sample_id, priors_fwd, priors_rev, high_sensitivity),
+                                      .f = ~{
+                                        if(..7){
+                                        step_dada2_single(fcid = ..1,
+                                                              input_dir = paste0("data/",..1,"/02_filtered"),
+                                                              sample_id= ..4,
+                                                              pcr_primers = ..2,
+                                                              output = paste0("output/rds/",..1,"_",..2,"_", ..4,"_dada2.rds"),
+                                                              qc_dir = paste0("output/logs/",..1),
+                                                              priors_fwd = ..5,
+                                                              priors_rev = ..6,
+                                                              error_model = ..3,
+                                                              multithread = FALSE,
+                                                              quiet = FALSE)
+                                        } else {
+                                          # Just copy over 
+                                          saveRDS(readRDS(denoise[stringr::str_detect(denoise,  paste0("output/rds/",..1,"_",..2,"_",..4,"_dada1.rds"))]), paste0("output/rds/",..1,"_",..2,"_",..4,"_dada2.rds"))
+                                        }
+                                      }
+    ))
+  return(paste0("output/rds/",unique(process$fcid),"_", unique(process$pcr_primers),"_",  unique(process$sample_id),"_dada2.rds"))
+}, format="file", pattern = map(temp_samdf3_grouped_sample), iteration = "vector"),
+
+# Merge the dada objects that were created separately objects
+tar_target(dada_merged,{
+  dada_fwd <- denoise2 %>%
+    purrr::map(~{readRDS(.x)}[[1]])
+  dada_rev <- denoise2 %>%
+    purrr::map(~{readRDS(.x)}[[2]])
+
+  saveRDS(list(dada_fwd =dada_fwd, dada_rev = dada_rev), "output/rds/dada_merged.rds")
+  return("output/rds/dada_merged.rds")
+  
+}, format="file"),
+
+# Merge reads and create seqtab
 tar_target(dada,{
   process <- temp_samdf3_grouped %>%
     dplyr::select(-one_of("concat_unmerged"))%>%
@@ -472,7 +553,7 @@ tar_target(dada,{
     dplyr::group_by(fcid, pcr_primers, concat_unmerged) %>%
     tidyr::nest() %>%
     dplyr::mutate(dada = purrr::map2(fcid, pcr_primers, ~{
-      readRDS(denoise[stringr::str_detect(denoise,  paste0("output/rds/",.x,"_",.y,"_dada.rds"))]) 
+      readRDS(dada_merged) 
     })) %>%
     dplyr::mutate(dada2 = purrr::pmap(dplyr::select(.,fcid, pcr_primers, concat_unmerged, dada),
                                       .f = ~step_mergereads(fcid = ..1,
