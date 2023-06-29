@@ -26,18 +26,12 @@ tar_option_set(packages = c(
   "dada2",
   "ngsReports",
   "taxreturn",
-  "seqateurs",
-  "mirai",
-  "crew",
-  "nanonext"
+  "seqateurs"
 ),
 imports =c(
   "taxreturn"
-),
-controller = crew::crew_controller_local(
-  workers = 3,
-  seconds_idle = 3),
-workspace_on_error = TRUE)
+), workspace_on_error = TRUE)
+
 
 # Targets pipeline
 list(
