@@ -2942,11 +2942,11 @@
       "Version": "0.0.0.9000",
       "Source": "GitHub",
       "RemoteType": "github",
+      "RemoteHost": "api.github.com",
       "RemoteUsername": "alexpiper",
       "RemoteRepo": "seqateurs",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "e239467d732408af513963ac1a98748c71a3ddb9",
-      "RemoteHost": "api.github.com",
+      "RemoteRef": "master",
+      "RemoteSha": "6938dee9eb58c7d1cd566bda4b87b0d28266649d",
       "Requirements": [
         "Biostrings",
         "DECIPHER",
@@ -2972,7 +2972,7 @@
         "utils",
         "xml2"
       ],
-      "Hash": "e7ac53e0dd8b3c650aeb24892cd2dd71"
+      "Hash": "70abdfaa51b27beb7aabf5190d46c1c0"
     },
     "shiny": {
       "Package": "shiny",

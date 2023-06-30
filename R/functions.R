@@ -875,48 +875,41 @@ step_filter_reads <- function(sample_id, input_dir, output_dir, min_length = 20,
 }
 
 #  DADA2 ------------------------------------------------------------------
-step_errormodel <- function(fcid, input_dir, pcr_primers, output, qc_dir, nbases=1e+08, randomize=FALSE, multithread=FALSE,
-                       write_all = FALSE, quiet=FALSE){
+step_errormodel <- function(fcid, input_dir, pcr_primers, output, qc_dir, read="F", nbases=1e+08, 
+                            randomize=FALSE, multithread=FALSE, write_all = FALSE, quiet=FALSE){
   
   input_dir <- normalizePath(input_dir)
   output <- normalizePath(output)
   qc_dir <- normalizePath(qc_dir)
-  filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
-  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
-  
+  if(read == "F"){
+    filts <- list.files(input_dir, pattern= "*R1_001.*", full.names = TRUE)
+    message(paste0("Modelling forward read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
+  } else if (read == "R"){
+    filts <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+    message(paste0("Modelling reverse read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
+  } else {
+    stop ("read must be F or R!")
+  }
   # Subset fastqs to just the relevent pcr primers
-  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
-  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
-  
-  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
-  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
+  filts <- filts[str_detect(filts,paste0(pcr_primers, "(-|_|$)"))]
+  message(paste0(length(filts), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
   
   # Learn error rates from a subset of the samples and reads (rather than running self-consist with full dataset)
-  message(paste0("Modelling forward read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
-  errF <-  dada2::learnErrors(filtFs, multithread = multithread, nbases = nbases,
+  err <-  dada2::learnErrors(filts, multithread = multithread, nbases = nbases,
                               randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
-  message(paste0("Modelling reverse read error rates for primers: ", pcr_primers, " and flowcell: ", fcid))
-  errR <-  dada2::learnErrors(filtRs, multithread = multithread, nbases = nbases,
-                              randomize = randomize, qualityType = "FastqQuality", verbose=TRUE)
-  
   #write out errors for diagnostics
   if(write_all){
-    write_csv(as.data.frame(errF$trans), paste0(qc_dir, "/", fcid, "_errF_observed_transitions.csv"))
-    write_csv(as.data.frame(errF$err_out), paste0(qc_dir, "/", fcid, "_errF_inferred_errors.csv"))
-    write_csv(as.data.frame(errR$trans), paste0(qc_dir, "/", fcid, "_errR_observed_transitions.csv"))
-    write_csv(as.data.frame(errR$err_out), paste0(qc_dir, "/", fcid, "_errR_inferred_errors.csv"))
+    write_csv(as.data.frame(err$trans), paste0(qc_dir, "/", fcid, "_err",read,"_observed_transitions.csv"))
+    write_csv(as.data.frame(err$err_out), paste0(qc_dir, "/", fcid, "_err",read,"_inferred_errors.csv"))
   }
   
   ##output error plots to see how well the algorithm modelled the errors in the different runs
-  p1 <-  dada2::plotErrors(errF, nominalQ = TRUE) + ggtitle(paste0(fcid, " Forward Reads"))
-  p2 <-  dada2::plotErrors(errR, nominalQ = TRUE) + ggtitle(paste0(fcid, " Reverse Reads"))
-  pdf(paste0(qc_dir,"/",fcid,"_", pcr_primers, "_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
+  p1 <- dada2::plotErrors(err, nominalQ = TRUE) + ggtitle(paste0(pcr_primers, " ", fcid, " Forward Reads"))
+  pdf(paste0(qc_dir,"/",fcid,"_", pcr_primers, "_", read,"_errormodel.pdf"), width = 11, height = 8 , paper="a4r")
     plot(p1)
-    plot(p2)
   try(dev.off(), silent=TRUE)
   
-  error_model <- list(errF, errR)
-  saveRDS(error_model, output)
+  saveRDS(err, output)
 }
 
 step_dada2 <- function(fcid, input_dir, pcr_primers, output, qc_dir, error_model, pool="pseudo",
@@ -981,6 +974,37 @@ step_dada2_single <- function(fcid, sample_id, input_dir, pcr_primers, output, q
   dadaRs <- dada2::dada(filtRs, err = errR, multithread = multithread, priors = priors_rev, selfConsist = FALSE, pool = FALSE, verbose = TRUE)
   
   dada <- list(dadaFs, dadaRs)
+  saveRDS(dada, output)
+}
+
+step_dada2_single2 <- function(fcid, sample_id, input_dir, pcr_primers, output, qc_dir, error_model, read="F",
+                               priors = NA, quiet=FALSE,  multithread=FALSE){
+
+  input_dir <- normalizePath(input_dir)
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
+  
+  if(read == "F"){
+    filts <- list.files(input_dir, pattern= "*R1_001.*", full.names = TRUE)
+    message(paste0("Denoising forward reads for sample: ", sample_id))
+  } else if (read == "R"){
+    filts <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
+    message(paste0("Denoising reverse reads for sample: ", sample_id))
+  } else {
+    stop ("read must be F or R!")
+  }
+  # Subset fastqs to just the relevent sample_id
+  filts <- filts[str_detect(filts, sample_id)]
+  
+  # Handle priors
+  if(length(priors) == 1 && is.na(priors)){
+    priors <- character(0)
+  }
+  #Denoise reads
+  if(length(priors) > 1 ){
+    message("High Sensitivity mode set: Using prior sequences to refine ASV inference")
+  }
+  dada <- dada2::dada(filts, err = error_model, multithread = multithread, priors = priors, selfConsist = FALSE, pool = FALSE, verbose = TRUE)
   saveRDS(dada, output)
 }
 
