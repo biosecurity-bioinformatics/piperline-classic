@@ -26,12 +26,16 @@ tar_option_set(packages = c(
   "dada2",
   "ngsReports",
   "taxreturn",
-  "seqateurs"
+  "seqateurs",
+  "mirai",
+  "crew",
+  "nanonext"
 ),
 imports =c(
   "taxreturn",
   "seqateurs"
-), workspace_on_error = TRUE)
+),
+workspace_on_error = TRUE)
 
 
 # Targets pipeline
