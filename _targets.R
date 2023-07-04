@@ -31,8 +31,11 @@ tar_option_set(packages = c(
 imports =c(
   "taxreturn",
   "seqateurs"
-), workspace_on_error = TRUE)
-
+),
+controller = crew::crew_controller_local(
+  workers = 3,
+  seconds_idle = 3),
+workspace_on_error = TRUE)
 
 # Targets pipeline
 list(
