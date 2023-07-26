@@ -1028,9 +1028,13 @@ step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
   filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
   filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
   
-  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
-  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
-  
+  if(!all.equal(length(filtFs),length(filtRs), length(dadaFs), length(dadaFs))){
+    stop(paste0("Number of input files dont match! (filtered F:",
+                length(filtFs), ", filtered R: ", length(filtFs), 
+                ", denoised F:", length(dadaFs), ", denoised R:", length(dadaRs),")"))
+    
+  }
+
   # Merge reads
   message(paste0("Merging forward and reverse reads for ", pcr_primers, " and flowcell: ", fcid))
   if(write_all | concat_unmerged){
