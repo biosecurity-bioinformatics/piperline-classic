@@ -769,11 +769,6 @@ tar_target(write_seqtab_qualplots, {
              unique()%>%
              stringr::str_split(pattern=";", n=Inf) %>% 
              unlist()
-           ##If its empty - write a dummy file
-           #if(is.na(process)){
-           #  out <- tempfile(pattern="dummy")
-           #  writeLines("TEST", out)
-           #}
            return(out)
   }
   ),
@@ -783,11 +778,6 @@ tar_target(write_seqtab_qualplots, {
              unique() %>%
              stringr::str_split(pattern=";", n=Inf) %>% 
              unlist()
-           ## If its empty - write a dummy file
-           #if(is.na(process)){
-           #  out <- tempfile(pattern="dummy")
-           #  writeLines("TEST", out)
-           #}
            return(out)
   }
   ),

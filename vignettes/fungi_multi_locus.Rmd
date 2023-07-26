@@ -272,7 +272,6 @@ tar_glimpse()
 tar_make()
 ```
 
-
 # Results
 
-See the general vignette for an in-depth explanation of the results and quality control outputs
+See the [general introduction](https://alexpiper.github.io/piperline/vignettes/general.html) vignette for an in-depth explanation of the results and quality control outputs
