@@ -1010,23 +1010,31 @@ step_dada2_single2 <- function(fcid, sample_id, input_dir, pcr_primers, output, 
 
 
 step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
-                        write_all = FALSE, quiet=FALSE,  multithread=FALSE, concat_unmerged=FALSE){
+                            write_all = FALSE, quiet=FALSE,  multithread=FALSE, concat_unmerged=FALSE){
   
+  # read in denoised files and subset to just the relevent pcr primers
   dadaFs <- dada[[1]]
   dadaRs <- dada[[2]]
+  dadaFs <- dadaFs[str_detect(names(dadaFs),paste0(pcr_primers, "(-|_|$)"))]
+  dadaRs <- dadaRs[str_detect(names(dadaRs),paste0(pcr_primers, "(-|_|$)"))]
   
   input_dir <- normalizePath(input_dir)
   output <- normalizePath(output)
   qc_dir <- normalizePath(qc_dir)
+  
+  # Read in fastqs and subset to just the relevent pcr primers
   filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
   filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
-  
-  # Subset fastqs to just the relevent pcr primers
   filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
   filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
-  if(length(filtFs) != length(filtRs)) stop(paste0("Forward and reverse files for ",fcid," do not match."))
-  message(paste0(length(filtFs), " fastq files to process for primers: ", pcr_primers, " and flowcell: ", fcid))
   
+  if(!all.equal(length(filtFs),length(filtRs), length(dadaFs), length(dadaFs))){
+    stop(paste0("Number of input files dont match! (filtered F:",
+                length(filtFs), ", filtered R: ", length(filtFs), 
+                ", denoised F:", length(dadaFs), ", denoised R:", length(dadaRs),")"))
+    
+  }
+
   # Merge reads
   message(paste0("Merging forward and reverse reads for ", pcr_primers, " and flowcell: ", fcid))
   if(write_all | concat_unmerged){

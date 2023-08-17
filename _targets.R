@@ -26,7 +26,10 @@ tar_option_set(packages = c(
   "dada2",
   "ngsReports",
   "taxreturn",
-  "seqateurs"
+  "seqateurs",
+  "mirai",
+  "crew",
+  "nanonext"
 ),
 imports =c(
   "taxreturn",
@@ -36,6 +39,7 @@ controller = crew::crew_controller_local(
   workers = 3,
   seconds_idle = 3),
 workspace_on_error = TRUE)
+
 
 # Targets pipeline
 list(
@@ -768,11 +772,6 @@ tar_target(write_seqtab_qualplots, {
              unique()%>%
              stringr::str_split(pattern=";", n=Inf) %>% 
              unlist()
-           ##If its empty - write a dummy file
-           #if(is.na(process)){
-           #  out <- tempfile(pattern="dummy")
-           #  writeLines("TEST", out)
-           #}
            return(out)
   }
   ),
@@ -782,11 +781,6 @@ tar_target(write_seqtab_qualplots, {
              unique() %>%
              stringr::str_split(pattern=";", n=Inf) %>% 
              unlist()
-           ## If its empty - write a dummy file
-           #if(is.na(process)){
-           #  out <- tempfile(pattern="dummy")
-           #  writeLines("TEST", out)
-           #}
            return(out)
   }
   ),

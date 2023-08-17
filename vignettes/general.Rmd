@@ -454,6 +454,8 @@ params <- tibble(
   # ASV filtering
   asv_min_length = c(195, 207),
   asv_max_length = c(215, 227),
+  high_sensitivity = TRUE,
+  concat_unmerged = FALSE,
   genetic_code = c("SGC4", "SGC0"),
   coding = c(TRUE, TRUE),
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
@@ -502,6 +504,8 @@ params <- tibble(
   # ASV filtering
   asv_min_length = c(195, 207),
   asv_max_length = c(215, 227),
+  high_sensitivity = TRUE,
+  concat_unmerged = FALSE,
   genetic_code = c("SGC4", "SGC0"),
   coding = c(TRUE, TRUE),
   phmm = c("reference/phmm/Bactrocera_COI.rds", "reference/phmm/Bactrocera_EIF3L.rds"),
@@ -543,19 +547,19 @@ tar_make()
 
 After the run, two directories should have been made within the output folder, output/results/unfiltered which contains the results before any taxonomic subsetting, sample minimum abundance, and ASV minimum abundance filtering, and output/results/filtered containing the results after these steps. Within each of these folders there should be a series of outputs:
 
-* **seqtab.csv** - This lists the abundance of each ASV and the sample it was detected in
+* **summary.csv** - This is the main summary file which lists the abundance of each ASV, the taxonomy assigned to it, and the read counts for each sample it was detected in.
 
-* **taxtab.csv** - This lists the heirarchial taxonomy assigned to each ASV
-
-* **samdf.csv** - This is the sample tracking sheet that lists the sequencing details for each sample
-
-* **ps.rds** - This phyloseq object contains the information from the above 3 files, and can be analysed further using the [phyloseq R package](https://joey711.github.io/phyloseq/), a useful tool for plotting and further analysis of metabarcoding and microbiome datasets
+* **ps.rds** - This phyloseq object contains the same information as the summary file, but in a format that can be analysed further using the [phyloseq R package](https://joey711.github.io/phyloseq/), a useful tool for plotting and further analysis of metabarcoding and microbiome datasets.
 
 * **asvs.fasta** - This contains the amplification sequence variants inferred from the data set
 
-* **spp_sum.csv** - This is a Species level summary listing the abundance of each Species and the sample it was detected in
+* **seqtab.csv** - This lists the abundance of each ASV and the sample it was detected in. This file is generally for development purposes only, and all information contained here is present in the summmary csv.
 
-* **raw.csv** - This is a large file containing all the above results in a single csv
+* **taxtab.csv** - This lists the heirarchial taxonomy assigned to each ASV. This file is generally for development purposes only, and all information contained here is present in the summmary csv.
+
+* **samdf.csv** - This is the sample tracking sheet that lists the sequencing details for each sample. This file is generally for development purposes only, and all information contained here is present in the summmary csv.
+
+* **raw.csv** - This is a large file containing all the above results in a single csv in a 'long' format appropriate for further statistical analysis.
 
 ## Quality control
 
@@ -570,7 +574,7 @@ The pipeline also outputs some quality control plots that should be checked to e
     
     + **output/logs/FCID/FCID_postfilt_qualplots.pdf** - This multiplot summarises the read quality scores for the forward and reverse reads, pre filtering. These plots list the same information as the pre-filtering quality plots, and should be checked to ensure that the filtering has been correctly applied. i.e., if reads were truncated or trimmed on the left or right (params read_trunc_length, read_trim_left, read_trim_right) they should be shorter then the pre-filter plots, and if a maximum expected error filter (param read_max_ee) was applied, none of the EE quantiles should be above the corresponding red line
 
-    + **output/logs/FCID/FCID_errormodel.pdf** - This plot summarises the error model used for dada2 that was inferred from the data for the respective flow cell. The error rates for each possible transition (A→C, A→G, etc) are shown in each subplot. The dot-points are the error rates observed in the data for each quality score. The black line shows the estimated error rates from the machine-learning algorithm. The red line shows the error rates that would be expected if the Q-scores assigned by the sequencer were completely accurate. This plot can be more subjective to interpret, but generally you want to see the estimated error rates (black line) decrease as the quality score (x axis) increases, in a relatively linear fashion. Minor humps in the black line are no problem, but a very jagged line may indicate that the error model did not fit correctly. Note: for NextSeq and NovaSeq data, the binned quality scores provided by the sequencer can cause large humps or dips in the error model fit. This is generally not a big problem, see [this github issue](https://github.com/benjjneb/dada2/issues/1307) for a deeper discussion on fitting error models for binned quality scores.
+    + **output/logs/FCID/FCID_pcrprimers_errormodel.pdf** - There is a separate PDF for the forward and reverse error models for each primer set and flow cell. Each plot summarises the error model used for dada2 that was inferred from the data for the respective flow cell. The error rates for each possible transition (A→C, A→G, etc) are shown in each subplot. The dot-points are the error rates observed in the data for each quality score. The black line shows the estimated error rates from the machine-learning algorithm. The red line shows the error rates that would be expected if the Q-scores assigned by the sequencer were completely accurate. This plot can be more subjective to interpret, but generally you want to see the estimated error rates (black line) decrease as the quality score (x axis) increases, in a relatively linear fashion. Minor humps in the black line are no problem, but a very jagged line may indicate that the error model did not fit correctly. Note: for NextSeq and NovaSeq data, the binned quality scores provided by the sequencer can cause large humps or dips in the error model fit. This is generally not a big problem, see [this github issue](https://github.com/benjjneb/dada2/issues/1307) for a deeper discussion on fitting error models for binned quality scores.
 
 * **Whole dataset quality checks:**
     + **output/logs/ASV_cleanup_summary.pdf** - This plot lists the abundance, and number of unique sequence variance inferred from dada2, their lengths, and whether they were retained or filtered out during the ASV filtering step. Generally you should see a lot of unique sequences filtered out in this step, but the majority of the abundance should remain. 
