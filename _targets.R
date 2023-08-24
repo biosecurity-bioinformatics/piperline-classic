@@ -1,5 +1,6 @@
 library(targets)
 library(tarchetypes)
+library(crew)
 source("R/functions.R")
 options(tidyverse.quiet = TRUE)
 
@@ -39,6 +40,9 @@ controller = crew::crew_controller_local(
   workers = 3,
   seconds_idle = 3),
 workspace_on_error = TRUE)
+
+# Source script files in R directory
+tar_source()
 
 
 # Targets pipeline
