@@ -34,7 +34,6 @@ if(is.null(nthreads) | nthreads ==1 ){
   stop("threads parameter must be numeric")
 }
 
-local_controller <- NULL
 # Load packages -----------------------------------------------------------
 tar_option_set(packages = c(
   "ggplot2",
