@@ -5,18 +5,18 @@ source("R/functions.R")
 options(tidyverse.quiet = TRUE)
 
 # Set up local controller if threads > 1
-#nthreads <- readr::read_csv("sample_data/loci_params.csv", show_col_types = FALSE)$threads
-#if(is.null(nthreads) | nthreads ==1 ){
-#  local_controller <- NULL
-#} else if (is.numeric(nthreads) & nthreads > 1){
-#  message(paste0("Running pipeline across ", nthreads, " parallel threads"))
-#  local_controller <- crew::crew_controller_local(
-#    name="local",
-#    workers = nthreads,
-#    seconds_idle = 3)
-#} else {
-#  stop("threads parameter must be numeric")
-#}
+nthreads <- readr::read_csv("sample_data/loci_params.csv", show_col_types = FALSE)$threads
+if(is.null(nthreads) | nthreads ==1 ){
+  local_controller <- NULL
+} else if (is.numeric(nthreads) & nthreads > 1){
+  message(paste0("Running pipeline across ", nthreads, " parallel threads"))
+  local_controller <- crew::crew_controller_local(
+    name="local",
+    workers = nthreads,
+    seconds_idle = 3)
+} else {
+  stop("threads parameter must be numeric")
+}
 
 local_controller <- NULL
 # Load packages -----------------------------------------------------------
@@ -55,8 +55,7 @@ controller = local_controller,
 workspace_on_error = TRUE)
 
 # Source script files in R directory
-#tar_source()
-
+tar_source()
 
 # Targets pipeline
 list(

@@ -320,7 +320,7 @@ params <- tibble(
   min_taxa_ra = 1e-4, #1e-4 is 0.01%
   
   # General pipeline parameters
-  threads=3
+  threads=1
 )
 
 write_csv(params, "sample_data/loci_params.csv")
