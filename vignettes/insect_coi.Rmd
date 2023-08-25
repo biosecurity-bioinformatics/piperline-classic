@@ -270,6 +270,9 @@ For this workflow a single primer set was used across all samples. For multiple 
     + **min_sample_reads** - Minimum reads per sample after filtering
     + **min_taxa_reads** - Minimum reads per ASV to retain
     + **min_taxa_ra** - Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
+    
+* **General pipeline parameters**
+    + **threads* - Number of CPU threads to run the pipeline across
 
 ```{R}
 # Params to add in step_add_parameters
@@ -315,6 +318,9 @@ params <- tibble(
   min_sample_reads = 1000,
   min_taxa_reads= NA,
   min_taxa_ra = 1e-4, #1e-4 is 0.01%
+  
+  # General pipeline parameters
+  threads=3
 )
 
 write_csv(params, "sample_data/loci_params.csv")
@@ -325,10 +331,6 @@ Now that the sample data sheet and parameters are defined, the pipeline steps ca
 
 ```{r}
 tar_make()
-
-# Alternatively run in background
-tar_make(callr_function = callr::r_bg, reporter = "silent")
-tar_poll()
 ```
 
 # Results

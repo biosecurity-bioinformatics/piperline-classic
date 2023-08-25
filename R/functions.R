@@ -1022,12 +1022,14 @@ step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
   output <- normalizePath(output)
   qc_dir <- normalizePath(qc_dir)
   
-  # Read in fastqs and subset to just the relevent pcr primers
-  filtFs <- list.files(input_dir, pattern="R1_001.*", full.names = TRUE)
-  filtRs <- list.files(input_dir, pattern="R2_001.*", full.names = TRUE)
-  filtFs <- filtFs[str_detect(filtFs,paste0(pcr_primers, "(-|_|$)"))]
-  filtRs <- filtRs[str_detect(filtRs,paste0(pcr_primers, "(-|_|$)"))]
-  
+  # Read in fastqs for just those samples in the dadas
+  filtFs <- map_chr(names(dadaFs), ~{
+    list.files(input_dir, pattern=paste0(.x, ".*R1_001.*"), full.names = TRUE)
+  })
+  filtRs <- map_chr(names(dadaRs), ~{
+    list.files(input_dir, pattern=paste0(.x, ".*R2_001.*"), full.names = TRUE)
+  })
+
   if(!all.equal(length(filtFs),length(filtRs), length(dadaFs), length(dadaFs))){
     stop(paste0("Number of input files dont match! (filtered F:",
                 length(filtFs), ", filtered R: ", length(filtFs), 
@@ -1124,8 +1126,9 @@ step_mergereads <- function(fcid, input_dir, pcr_primers, output, qc_dir, dada,
 # ASV filtering -----------------------------------------------------------
 
 # Group by target loci and apply
-step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max_length = NULL, 
-                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL, primers=NULL, multithread=FALSE, quiet=FALSE){
+step_filter_asvs <- function(seqtab, pcr_primers, output, qc_dir, min_length = NULL, max_length = NULL, 
+                             check_frame=FALSE, genetic_code="SGC4", phmm=NULL,
+                             primers=NULL, multithread=FALSE, quiet=FALSE){
   
   # Handle NA inputs
   if(is.na(min_length)){min_length <- NULL}
@@ -1133,6 +1136,9 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   if(is.na(phmm)){phmm <- NULL}
   if(any(is.na(primers))){primers <- NULL}
   
+  # Normalise paths
+  output <- normalizePath(output)
+  qc_dir <- normalizePath(qc_dir)
   
   if(is.matrix(seqtab) | is.data.frame(seqtab)){
     if(!quiet){message("Input is a matrix or data frame")}
@@ -1246,8 +1252,8 @@ step_filter_asvs <- function(seqtab, pcr_primers, qc_dir, min_length = NULL, max
   }
   reads_final <- rowSums(seqtab_final)
   
-  saveRDS(seqtab_final, paste0("output/rds/",pcr_primers,"_seqtab.cleaned.rds"))
-  
+  saveRDS(seqtab_final, output)
+        
   # Output a cleanup summary
   cleanup <- seqtab %>%
     as.data.frame() %>%
