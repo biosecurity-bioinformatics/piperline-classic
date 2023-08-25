@@ -249,6 +249,9 @@ params <- tibble(
   min_sample_reads = 1000,
   min_taxa_reads= NA_integer_, # Minimum reads per ASV to retain
   min_taxa_ra = NA_real_, # Minimum relative abundance per ASV to retain. 1e-4 is 0.01%
+    
+  # General pipeline parameters
+  threads = 1
 )
 
 write_csv(params, "sample_data/loci_params.csv")

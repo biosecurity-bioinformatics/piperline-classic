@@ -13,7 +13,23 @@ if(is.null(nthreads) | nthreads ==1 ){
   local_controller <- crew::crew_controller_local(
     name="local",
     workers = nthreads,
-    seconds_idle = 3)
+    host = "127.0.0.1",
+    port = NULL,
+    tls_enable = FALSE,
+    tls_config = NULL,
+    seconds_interval = 0.25,
+    seconds_timeout = 10,
+    seconds_launch = 30,
+    seconds_idle = Inf,
+    seconds_wall = Inf,
+    seconds_exit = 1,
+    tasks_max = Inf,
+    tasks_timers = 0L,
+    reset_globals = TRUE,
+    reset_packages = FALSE,
+    reset_options = FALSE,
+    garbage_collection = FALSE,
+    launch_max = 10L)
 } else {
   stop("threads parameter must be numeric")
 }
