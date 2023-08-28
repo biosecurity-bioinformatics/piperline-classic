@@ -6,7 +6,9 @@ options(tidyverse.quiet = TRUE)
 
 # Set up local controller if threads > 1
 nthreads <- readr::read_csv("sample_data/loci_params.csv", show_col_types = FALSE)$threads
-if(is.null(nthreads) | nthreads ==1 ){
+if(is.null(nthreads)){
+  local_controller <- NULL
+} else if ( nthreads ==1 ){
   local_controller <- NULL
 } else if (is.numeric(nthreads) & nthreads > 1){
   message(paste0("Running pipeline across ", nthreads, " parallel threads"))
