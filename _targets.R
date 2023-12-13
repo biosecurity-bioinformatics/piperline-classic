@@ -130,15 +130,21 @@ list(
                    target_species = NA_character_,
                    min_sample_reads = 0,
                    min_taxa_reads = 0,
-                   min_taxa_ra = 0
+                   min_taxa_ra = 0,
+                   threads = 1
     )
     # Read in params file
-    input_params <- readr::read_csv(params_file, show_col_types = FALSE)
-
-    # Make sure all columns are present
-    params_df <-input_params %>%
-      bind_rows( default_params %>% filter(FALSE) ) 
-
+    input_params <- readr::read_csv(params_file, show_col_types = FALSE, col_types = cols(.default = "c"))
+    
+    # Make sure all columns are present and same type using a special bind operation
+    new_bind <- function(a, b) {
+      common_cols <- intersect(names(a), names(b))
+      b[common_cols] <- map2_df(b[common_cols], 
+                                map(a[common_cols], class), ~{class(.x) <- .y;.x})
+      bind_rows(a, b)  
+    }
+    params_df <- new_bind(default_params %>% filter(FALSE), input_params) 
+    
     # Check columns arent NA
     for(i in 1:ncol(default_params)){
       param_to_check <- colnames(default_params)[i]
