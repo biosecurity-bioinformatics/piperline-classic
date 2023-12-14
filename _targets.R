@@ -84,17 +84,61 @@ list(
   
   # Load input tracking files
   tar_target(samdf, {
-      process <- readr::read_csv(samdf_file, show_col_types = FALSE)
+      # define default fields
+      default_samdf <- tibble::tibble(
+        sample_id = NA_character_,
+        sample_name = NA_character_,
+        extraction_rep = NA_integer_,
+        amp_rep = NA_integer_,
+        client_name = NA_character_,
+        experiment_name = NA_character_,
+        sample_type = NA_character_,
+        collection_method = NA_character_,
+        collection_location = NA_character_,
+        lat_lon = NA_character_,
+        environment = NA_character_,
+        collection_date = NA_character_,
+        operator_name = NA_character_,
+        description = NA_character_,
+        assay = NA_character_,
+        extraction_method = NA_character_,
+        amp_method = NA_character_,
+        target_gene = NA_character_,
+        pcr_primers = NA_character_,
+        for_primer_seq = NA_character_,
+        rev_primer_seq = NA_character_,
+        index_plate = NA_character_,
+        index_well = NA_character_,
+        i7_index_id = NA_character_,
+        i7_index = NA_character_,
+        i5_index_id = NA_character_,
+        i5_index = NA_character_,
+        seq_platform = NA_character_,
+        fcid = NA_character_,
+        for_read_length = NA_integer_,
+        rev_read_length = NA_integer_,
+        seq_run_id = NA_character_,
+        seq_id = NA_character_,
+        seq_date = NA_character_,
+        analysis_method = NA_character_,
+        notes = NA_character_
+      )
+      # Read in input samdf
+      input_samdf <- readr::read_csv(samdf_file, show_col_types = FALSE, col_types = cols(.default = "c"))
+      
+      # Make sure all columns are present and same type using a special bind operation
+      samdf_checked <- new_bind(default_samdf %>% filter(FALSE), input_samdf) 
+      
       # Check essential parameters are present
-      assertthat::assert_that(all(is.character(process$sample_id)) & all(!is.na(process$sample_id)),
+      assertthat::assert_that(all(is.character(samdf_checked$sample_id)) & all(!is.na(samdf_checked$sample_id)),
                               msg = "All samples must have a sample_id in the sample_info.csv file")
-      assertthat::assert_that(all(is.character(process$pcr_primers)) & all(!is.na(process$pcr_primers)),
+      assertthat::assert_that(all(is.character(samdf_checked$pcr_primers)) & all(!is.na(samdf_checked$pcr_primers)),
                               msg = "All samples must have pcr_primers in the sample_info.csv file")
-      assertthat::assert_that(all(is.character(process$for_primer_seq)) & all(!is.na(process$for_primer_seq)),
+      assertthat::assert_that(all(is.character(samdf_checked$for_primer_seq)) & all(!is.na(samdf_checked$for_primer_seq)),
                               msg = "All samples must have a for_primer_seq in the sample_info.csv file")
-      assertthat::assert_that(all(is.character(process$rev_primer_seq)) & all(!is.na(process$rev_primer_seq)),
+      assertthat::assert_that(all(is.character(samdf_checked$rev_primer_seq)) & all(!is.na(samdf_checked$rev_primer_seq)),
                               msg = "All samples must have a rev_primer_seq in the sample_info.csv file")
-      return(process)
+      return(samdf_checked)
     }),
   
   tar_target(params, {
@@ -137,12 +181,6 @@ list(
     input_params <- readr::read_csv(params_file, show_col_types = FALSE, col_types = cols(.default = "c"))
     
     # Make sure all columns are present and same type using a special bind operation
-    new_bind <- function(a, b) {
-      common_cols <- intersect(names(a), names(b))
-      b[common_cols] <- map2_df(b[common_cols], 
-                                map(a[common_cols], class), ~{class(.x) <- .y;.x})
-      bind_rows(a, b)  
-    }
     params_df <- new_bind(default_params %>% filter(FALSE), input_params) 
     
     # Check columns arent NA

@@ -2221,6 +2221,13 @@ download_zenodo <- function(doi, path = ".", quiet = FALSE) {
   }
 }
 
+new_bind <- function(a, b) {
+  common_cols <- intersect(names(a), names(b))
+  b[common_cols] <- map2_df(b[common_cols], 
+                            map(a[common_cols], class), ~{class(.x) <- .y;.x})
+  bind_rows(a, b)  
+}
+
 # Phyloseq utilities ------------------------------------------------------
 
 
