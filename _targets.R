@@ -39,6 +39,7 @@ if(is.null(nthreads)){
 # Load packages -----------------------------------------------------------
 tar_option_set(packages = c(
   "ggplot2",
+  "scales",
   "gridExtra",
   "tibble",
   "dplyr",
@@ -1446,7 +1447,7 @@ tar_target(read_tracking, {
     ))) %>%
     ggplot(aes(x = step, y = reads, fill=pcr_primers))+
     geom_col() +
-    scale_y_continuous(labels = scales::label_number_si())+
+    scale_y_continuous(labels = label_number(scale_cut = cut_short_scale()))+
     facet_grid(fcid~.)+
     theme_bw()+
     theme(
