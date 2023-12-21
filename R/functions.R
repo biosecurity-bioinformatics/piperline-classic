@@ -1362,7 +1362,6 @@ step_filter_asvs <- function(seqtab, pcr_primers, output, qc_dir, min_length = N
 step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FALSE, quiet=FALSE,
                         ranks = c("Root","Kingdom", "Phylum","Class", "Order", "Family", "Genus","Species"),
                         return_ids=FALSE, remove_Ns=FALSE){
-  # Print arguments for testing
   # Load the relevent db
   trainingSet <- readRDS(normalizePath(database))
   
@@ -1395,7 +1394,9 @@ step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FA
             magrittr::set_colnames(ranks[1:ncol(.)])
         }) %>%
         mutate_all(stringr::str_replace,pattern="(?:.(?!_))+$", replacement="") %>%
-        magrittr::set_rownames(getSequences(seqtab)) 
+        magrittr::set_rownames(getSequences(seqtab))
+      # add empty ranks if none were assigned to lower ranks
+      tax <- new_bind(tibble::tibble(!!!ranks, .rows = 0, .name_repair = ~ ranks), tax)
     } else {
       warning(paste0("No sequences assigned with IDTAXA to ", database, " have you used the correct database?"))
       tax <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") 
@@ -1415,6 +1416,11 @@ step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FA
   # Check that output dimensions match input
   if(!all(rownames(tax) %in% colnames(seqtab))){
     stop("Number of ASVs classified does not match the number of input ASVs")
+  }
+  
+  # Check that all ranks are present
+  if(!all(colnames(tax) %in% ranks)){
+    stop("Number of ranks does not match")
   }
   
   # Return objects
