@@ -332,9 +332,6 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, quiet=FALSE){
   # Create qc_dir if it doesnt exist
   if(!dir.exists(qc_dir)) {dir.create(qc_dir, recursive = TRUE)}
   
-  # Handle multithreading
-  cores <- setup_multithread(multithread)
-  
   # Summarise indices
   indices <- sort(list.files(seq_dir, pattern="_R1_", full.names = TRUE)) 
   indices <- indices[stringr::str_detect(indices, ".fastq.gz$")] %>%
