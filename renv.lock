@@ -878,27 +878,6 @@
       ],
       "Hash": "54048beb0afc6b124b17ab0e908e7496"
     },
-    "broom": {
-      "Package": "broom",
-      "Version": "1.0.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "backports",
-        "dplyr",
-        "ellipsis",
-        "generics",
-        "glue",
-        "lifecycle",
-        "purrr",
-        "rlang",
-        "stringr",
-        "tibble",
-        "tidyr"
-      ],
-      "Hash": "fd25391c3c4f6ecf0fa95f1e6d15378c"
-    },
     "bs4Dash": {
       "Package": "bs4Dash",
       "Version": "2.3.0",
@@ -961,18 +940,6 @@
         "utils"
       ],
       "Hash": "9b2191ede20fa29828139b9900922e51"
-    },
-    "cellranger": {
-      "Package": "cellranger",
-      "Version": "1.1.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "rematch",
-        "tibble"
-      ],
-      "Hash": "f61dbaec772ccd2e17705c1e872e9e7c"
     },
     "checkmate": {
       "Package": "checkmate",
@@ -1109,19 +1076,6 @@
       ],
       "Hash": "94d63622fa8251219092b34de47a4136"
     },
-    "conflicted": {
-      "Package": "conflicted",
-      "Version": "1.2.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "memoise",
-        "rlang"
-      ],
-      "Hash": "bb097fccb22d156624fd07cd2894ddb6"
-    },
     "cpp11": {
       "Package": "cpp11",
       "Version": "0.4.7",
@@ -1249,34 +1203,6 @@
       ],
       "Hash": "d7602f0f55e0335b83f2353337848d6f"
     },
-    "dbplyr": {
-      "Package": "dbplyr",
-      "Version": "2.4.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "DBI",
-        "R",
-        "R6",
-        "blob",
-        "cli",
-        "dplyr",
-        "glue",
-        "lifecycle",
-        "magrittr",
-        "methods",
-        "pillar",
-        "purrr",
-        "rlang",
-        "tibble",
-        "tidyr",
-        "tidyselect",
-        "utils",
-        "vctrs",
-        "withr"
-      ],
-      "Hash": "59351f28a81f0742720b85363c4fdd61"
-    },
     "deldir": {
       "Package": "deldir",
       "Version": "2.0-2",
@@ -1336,25 +1262,6 @@
         "vctrs"
       ],
       "Hash": "fedd9d00c2944ff00a0e2696ccf048ec"
-    },
-    "dtplyr": {
-      "Package": "dtplyr",
-      "Version": "1.3.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "data.table",
-        "dplyr",
-        "glue",
-        "lifecycle",
-        "rlang",
-        "tibble",
-        "tidyselect",
-        "vctrs"
-      ],
-      "Hash": "54ed3ea01b11e81a86544faaecfef8e2"
     },
     "ellipsis": {
       "Package": "ellipsis",
@@ -1577,28 +1484,6 @@
       ],
       "Hash": "8e92c7bc53e91b9bb1faf9a6ef0e8514"
     },
-    "gargle": {
-      "Package": "gargle",
-      "Version": "1.5.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "fs",
-        "glue",
-        "httr",
-        "jsonlite",
-        "lifecycle",
-        "openssl",
-        "rappdirs",
-        "rlang",
-        "stats",
-        "utils",
-        "withr"
-      ],
-      "Hash": "fc0b272e5847c58cd5da9b20eedbd026"
-    },
     "generics": {
       "Package": "generics",
       "Version": "0.1.3",
@@ -1678,59 +1563,6 @@
       ],
       "Hash": "4f2596dfb05dac67b9dc558e5c6fba2e"
     },
-    "googledrive": {
-      "Package": "googledrive",
-      "Version": "2.1.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "gargle",
-        "glue",
-        "httr",
-        "jsonlite",
-        "lifecycle",
-        "magrittr",
-        "pillar",
-        "purrr",
-        "rlang",
-        "tibble",
-        "utils",
-        "uuid",
-        "vctrs",
-        "withr"
-      ],
-      "Hash": "e99641edef03e2a5e87f0a0b1fcc97f4"
-    },
-    "googlesheets4": {
-      "Package": "googlesheets4",
-      "Version": "1.1.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cellranger",
-        "cli",
-        "curl",
-        "gargle",
-        "glue",
-        "googledrive",
-        "httr",
-        "ids",
-        "lifecycle",
-        "magrittr",
-        "methods",
-        "purrr",
-        "rematch2",
-        "rlang",
-        "tibble",
-        "utils",
-        "vctrs",
-        "withr"
-      ],
-      "Hash": "d6db1667059d027da730decdc214b959"
-    },
     "gridExtra": {
       "Package": "gridExtra",
       "Version": "2.3",
@@ -1789,27 +1621,6 @@
         "rlang"
       ],
       "Hash": "b29cf3031f49b04ab9c852c912547eef"
-    },
-    "haven": {
-      "Package": "haven",
-      "Version": "2.5.4",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cli",
-        "cpp11",
-        "forcats",
-        "hms",
-        "lifecycle",
-        "methods",
-        "readr",
-        "rlang",
-        "tibble",
-        "tidyselect",
-        "vctrs"
-      ],
-      "Hash": "9171f898db9d9c4c1b2c745adc2c1ef1"
     },
     "highr": {
       "Package": "highr",
@@ -1932,17 +1743,6 @@
         "R"
       ],
       "Hash": "5b2c97022c4b5cfbc3838315a3bf7867"
-    },
-    "ids": {
-      "Package": "ids",
-      "Version": "1.0.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "openssl",
-        "uuid"
-      ],
-      "Hash": "99df65cfef20e525ed38c3d2577f7190"
     },
     "igraph": {
       "Package": "igraph",
@@ -2308,24 +2108,6 @@
         "R"
       ],
       "Hash": "c83992ef63553d1e4b97162a4a753470"
-    },
-    "modelr": {
-      "Package": "modelr",
-      "Version": "0.1.11",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "broom",
-        "magrittr",
-        "purrr",
-        "rlang",
-        "tibble",
-        "tidyr",
-        "tidyselect",
-        "vctrs"
-      ],
-      "Hash": "4f50122dc256b1b6996a4703fecea821"
     },
     "multtest": {
       "Package": "multtest",
@@ -2849,17 +2631,6 @@
       ],
       "Hash": "5f919ae5e7f83a6f91dcf2288943370d"
     },
-    "ragg": {
-      "Package": "ragg",
-      "Version": "1.2.7",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "systemfonts",
-        "textshaping"
-      ],
-      "Hash": "90a1b8b7e518d7f90480d56453b4d062"
-    },
     "rappdirs": {
       "Package": "rappdirs",
       "Version": "0.3.3",
@@ -2928,38 +2699,6 @@
       ],
       "Hash": "b5047343b3825f37ad9d3b5d89aa1078"
     },
-    "readxl": {
-      "Package": "readxl",
-      "Version": "1.4.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cellranger",
-        "cpp11",
-        "progress",
-        "tibble",
-        "utils"
-      ],
-      "Hash": "8cf9c239b96df1bbb133b74aef77ad0a"
-    },
-    "rematch": {
-      "Package": "rematch",
-      "Version": "2.0.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "cbff1b666c6fa6d21202f07e2318d4f1"
-    },
-    "rematch2": {
-      "Package": "rematch2",
-      "Version": "2.1.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "tibble"
-      ],
-      "Hash": "76c9e04c712a05848ae7a23d2f170a40"
-    },
     "rentrez": {
       "Package": "rentrez",
       "Version": "1.2.3",
@@ -2982,28 +2721,6 @@
         "utils"
       ],
       "Hash": "41b847654f567341725473431dd0d5ab"
-    },
-    "reprex": {
-      "Package": "reprex",
-      "Version": "2.0.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "callr",
-        "cli",
-        "clipr",
-        "fs",
-        "glue",
-        "knitr",
-        "lifecycle",
-        "rlang",
-        "rmarkdown",
-        "rstudioapi",
-        "utils",
-        "withr"
-      ],
-      "Hash": "d66fe009d4c20b7ab1927eb405db9ee2"
     },
     "reshape2": {
       "Package": "reshape2",
@@ -3486,17 +3203,6 @@
       "Repository": "CRAN",
       "Hash": "3a1be13d68d47a8cd0bfd74739ca1555"
     },
-    "systemfonts": {
-      "Package": "systemfonts",
-      "Version": "1.0.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cpp11"
-      ],
-      "Hash": "15b594369e70b975ba9f064295983499"
-    },
     "tarchetypes": {
       "Package": "tarchetypes",
       "Version": "0.7.10",
@@ -3628,18 +3334,6 @@
       ],
       "Hash": "0ad521813aafbb3d538a886519f210d7"
     },
-    "textshaping": {
-      "Package": "textshaping",
-      "Version": "0.3.7",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "cpp11",
-        "systemfonts"
-      ],
-      "Hash": "997aac9ad649e0ef3b97f96cddd5622b"
-    },
     "tibble": {
       "Package": "tibble",
       "Version": "3.2.1",
@@ -3697,46 +3391,6 @@
         "withr"
       ],
       "Hash": "79540e5fcd9e0435af547d885f184fd5"
-    },
-    "tidyverse": {
-      "Package": "tidyverse",
-      "Version": "2.0.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "broom",
-        "cli",
-        "conflicted",
-        "dbplyr",
-        "dplyr",
-        "dtplyr",
-        "forcats",
-        "ggplot2",
-        "googledrive",
-        "googlesheets4",
-        "haven",
-        "hms",
-        "httr",
-        "jsonlite",
-        "lubridate",
-        "magrittr",
-        "modelr",
-        "pillar",
-        "purrr",
-        "ragg",
-        "readr",
-        "readxl",
-        "reprex",
-        "rlang",
-        "rstudioapi",
-        "rvest",
-        "stringr",
-        "tibble",
-        "tidyr",
-        "xml2"
-      ],
-      "Hash": "c328568cd14ea89a83bd4ca7f54ae07e"
     },
     "timechange": {
       "Package": "timechange",
