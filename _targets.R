@@ -330,7 +330,7 @@ list(
              process <- temp_samdf1_grouped %>%
                dplyr::group_by(fcid) %>%
                tidyr::nest() %>%
-               dplyr::mutate(switching_qc = purrr::map(fcid, step_switching_calc, multithread=FALSE, quiet=TRUE))
+               dplyr::mutate(switching_qc = purrr::map(fcid, step_switching_calc, quiet=TRUE))
              out <- paste0("output/logs/",unique(process$fcid),"/",unique(process$fcid),"_index_switching.pdf")
              if(is.na(process$switching_qc[[1]]$switch_rate)){
                pdf(file=out, paper="A4")

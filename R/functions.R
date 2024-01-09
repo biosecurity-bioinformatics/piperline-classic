@@ -313,10 +313,7 @@ step_multiqc <- function(fcid, quiet=FALSE){
   
 }
 
-
-
-
-step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, quiet=FALSE){
+step_switching_calc <- function(fcid, barcode_mismatch=1, quiet=FALSE){
   
   seq_dir <- paste0("data/", fcid, "/")
   qc_dir <- paste0("output/logs/", fcid,"/" )
@@ -342,7 +339,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   indices <- sort(list.files(seq_dir, pattern="_R1_", full.names = TRUE)) 
   indices <- indices[stringr::str_detect(indices, ".fastq.gz$")] %>%
     purrr::set_names() %>%
-    furrr::future_map(seqateurs::summarise_index) %>%
+    purrr::map(seqateurs::summarise_index) %>%
     dplyr::bind_rows(.id="Sample_Name")%>%
     dplyr::arrange(desc(Freq)) %>% 
     dplyr::mutate(Sample_Name = Sample_Name %>% 
@@ -386,7 +383,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
   
   # Get other undetermined reads which had completely unapplied indexes
   other_reads <- anti_join(indices,combos, by=c("index", "index2")) %>%
-    dplyr::summarise(sum = sum(Freq)) %>%
+    dplyr::summarise(sum = sum(Freq, na.rm = TRUE)) %>%
     dplyr::pull(sum)
   
   #Summary of index switching rate
@@ -429,18 +426,14 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
       index_dist <- index_dist[index_dist <= barcode_mismatch]
       return(index_list[which.min(index_dist)])
     })) %>%
-    tidyr::unnest(c(index, index2)) 
+    tidyr::unnest(c(index, index2)) %>%
+    group_by(index, index2, Sample_Name) %>%
+    summarise(Freq = sum(Freq))
 
-  sample_orders <- switch_plot_dat %>%
-    dplyr::filter(!stringr::str_detect(Sample_Name, "Undetermined")) %>%
-    dplyr::group_by(index, index2) %>%
-    summarise(Freq = sum(Freq)) %>%
-    top_n(n=1, Freq)
-  
   gg.switch <- switch_plot_dat %>%
     dplyr::group_by(Sample_Name, index, index2) %>%
     summarise(Freq = sum(Freq))%>%
-    dplyr::mutate(index = factor(index, levels=sample_orders$index), index2=factor(index2, levels=rev(sample_orders$index2)))  %>%
+    dplyr::mutate(index = factor(index, levels=applied_indices$index), index2=factor(index2, levels=rev(applied_indices$index2)))  %>%
     ggplot2::ggplot(aes(x = index, y = index2), stat="identity") +
     geom_tile(aes(fill = Freq),alpha=0.8)  + 
     scale_fill_viridis_c(name="log10 Reads", begin=0.1, trans="log10")+
@@ -449,7 +442,7 @@ step_switching_calc <- function(fcid, barcode_mismatch=1, multithread=FALSE, qui
           plot.subtitle =element_text(hjust = 0.5)
     ) +
     labs(title= fcid, subtitle = paste0(
-      "Total Reads: ", sum(indices$Freq),
+      "Total Reads: ", sum(indices$Freq, na.rm=TRUE),
       ", Switch rate: ", sprintf("%1.4f%%", res$switch_rate*100),
       ", Contam rate: ", sprintf("%1.6f%%", res$contam_rate*100),
       ", Other reads: ", other_reads)) 
