@@ -1179,7 +1179,9 @@ step_filter_asvs <- function(seqtab, pcr_primers, output, qc_dir, min_length = N
   }
   # Remove chimeras  
   seqtab_nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=multithread, verbose=!quiet)
-  if(!quiet){message(paste(sum(seqtab_nochim)/sum(seqtab),"of starting abundance remaining after chimera removal"))}
+  seqs_rem <- length(colnames(seqtab_nochim))/length(colnames(seqtab))
+  abund_rem <- sum(seqtab_nochim)/sum(seqtab)
+  message(paste(round(seqs_rem*100,2), "% of initial sequences and ",round(abund_rem*100,2), "% initial abundance remaining after chimera removal"))
   reads_chimerafilt <- rowSums(seqtab_nochim)
   
   # cut to expected size
@@ -1194,7 +1196,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, output, qc_dir, min_length = N
     if(!quiet){
       seqs_rem <- length(colnames(seqtab_cut))/length(colnames(seqtab))
       abund_rem <- sum(seqtab_cut)/sum(seqtab)
-      message(paste(seqs_rem, " of initial sequences and ",abund_rem, " of initial abundance remaining after length filtering"))
+      message(paste(round(seqs_rem*100,2), "% of initial sequences and ",round(abund_rem*100,2), "% initial abundance remaining after length filtering"))
     }
     reads_lengthfilt <- rowSums(seqtab_cut)
   } else {
@@ -1214,7 +1216,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, output, qc_dir, min_length = N
     if(!quiet){
       seqs_rem <- length(colnames(seqtab_phmm))/length(colnames(seqtab))
       abund_rem <- sum(seqtab_phmm)/sum(seqtab)
-      message(paste(seqs_rem, " of initial sequences and ",abund_rem, " of initial abundance remaining after PHMM filtering"))
+      message(paste(round(seqs_rem*100,2), "% of initial sequences and ",round(abund_rem*100,2), "% of initial abundance remaining after PHMM filtering"))
     }
     reads_phmmfilt <- rowSums(seqtab_phmm)
   } else {
@@ -1232,7 +1234,7 @@ step_filter_asvs <- function(seqtab, pcr_primers, output, qc_dir, min_length = N
     if(!quiet){
       seqs_rem <- length(colnames(seqtab_final))/length(colnames(seqtab))
       abund_rem <- sum(seqtab_final)/sum(seqtab)
-      message(paste(seqs_rem, " of initial sequences and ",abund_rem, " of initial abundance remaining after checking reading frame"))
+      message(paste(round(seqs_rem*100,2), "% of initial sequences and ",round(abund_rem*100,2), "% of initial abundance remaining after checking reading frame"))
     }
     reads_framefilt <- rowSums(seqtab_final)
   } else {

@@ -753,7 +753,7 @@ tar_target(dada_path,
 #  Filter ASVs -------------------------------------------------
 # Filter by primer
  tar_target(filtered_seqtab, {
-          temp_samdf3 %>%
+   temp_samdf3_grouped %>%
            dplyr::select(-one_of("asv_min_length", "asv_max_length", "phmm", "coding", "genetic_code"))%>%
            dplyr::left_join(params_asvfilter, by="pcr_primers") %>%
            dplyr::group_by(fcid, pcr_primers, asv_min_length, asv_max_length, phmm, coding, genetic_code, for_primer_seq, rev_primer_seq) %>%
@@ -786,7 +786,7 @@ tar_target(dada_path,
          dplyr::select(sample_id, sample_name, fcid, reads_starting, reads_chimerafilt, pcr_primers, reads_lengthfilt,
                        reads_phmmfilt, reads_framefilt, reads_final, plot, cleanup_summary)%>%
          dplyr::mutate(path = paste0("output/rds/",fcid, "_", pcr_primers,"_seqtab.cleaned.rds"))
- }, iteration = "vector"),
+ }, pattern = map(temp_samdf3_grouped), iteration = "vector"),
  
 # Return filepath for tracking
 tar_target(filtered_seqtab_path,
@@ -864,7 +864,7 @@ tar_target(write_seqtab_qualplots, {
 
 ## IDTAXA -------------------------------------------------------------------
  tar_target(tax_idtaxa,{ 
-   temp_samdf3 %>%
+   temp_samdf3_grouped %>%
      dplyr::select(-one_of("target_gene", "idtaxa_db"))%>%
      dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, idtaxa_confidence)) %>%
      tidyr::separate_rows(idtaxa_db, sep=";") %>%
@@ -894,7 +894,7 @@ tar_target(write_seqtab_qualplots, {
      mutate(idtaxa = purrr::map(idtaxa,~{
        .x$tax
      })) 
-   }, iteration = "vector"),
+   }, pattern = map(temp_samdf3_grouped), iteration = "vector"),
 
 # Write out idtaxa objects
 tar_target(idtaxa_path, {
@@ -910,7 +910,7 @@ tar_target(idtaxa_path, {
 ## BLAST -------------------------------------------------------------------
  tar_target(tax_blast_path,
             {
-           process <- temp_samdf3 %>%
+           process <- temp_samdf3_grouped %>%
              dplyr::select(-one_of("target_gene", "ref_fasta"))%>%
              dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, ref_fasta, blast_min_identity, blast_min_coverage, run_blast)) %>%
              tidyr::separate_rows(ref_fasta, sep=";") %>%
@@ -952,11 +952,11 @@ tar_target(idtaxa_path, {
            ))
           out <- unique(paste0("output/rds/",process$fcid, "_",process$pcr_primers, "_",basename(process$ref_fasta)  %>% stringr::str_remove("\\..*$"),"_blast.rds"))
           return(out)
-        }, format="file", iteration = "vector"),
+        }, pattern = map(temp_samdf3_grouped), format="file", iteration = "vector"),
  
 ## Aggregate taxonomic assignment methods-----------------------------------------------
  tar_target(joint_tax, {
-              process <- temp_samdf3 %>%
+              process <- temp_samdf3_grouped %>%
                 dplyr::select(-one_of("target_gene"))%>%
                 dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
                 dplyr::group_by(fcid, pcr_primers) %>%
@@ -1031,7 +1031,7 @@ tar_target(idtaxa_path, {
                 tidyr::unnest(data)
             out <- unique(paste0("output/rds/",process$fcid, "_", process$pcr_primers,"_taxblast.rds"))
             return(out)
-           }, format="file", iteration = "vector"),
+           }, pattern = map(temp_samdf3_grouped),  format="file", iteration = "vector"),
 
 ## Merge taxonomy tables  -----------------------------------------------------
  tar_target(merged_tax,
@@ -1088,7 +1088,7 @@ tar_target(idtaxa_path, {
 ## Assignment summary ---------------------------------------------------------
 
 tar_target(assignment_plot, {
-  temp_samdf3 %>%
+  temp_samdf3_grouped %>%
     dplyr::select(-one_of("target_gene", "idtaxa_db"))%>%
     dplyr::left_join(params_database %>% dplyr::select(pcr_primers, target_gene, idtaxa_db, ref_fasta)) %>%
     tidyr::separate_rows(ref_fasta, sep=";") %>%
@@ -1183,7 +1183,7 @@ tar_target(assignment_plot, {
                                     NULL
                                   }
                               }))
-}, iteration = "vector"),
+}, pattern = map(temp_samdf3_grouped), iteration = "vector"),
 
 # Write out assignment plot
 tar_target(write_assignment_plot, {
