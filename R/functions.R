@@ -1977,11 +1977,11 @@ create_samplesheet <- function(SampleSheet, runParameters, template = "V4"){
     stop("Error: you have provided ", length(SampleSheet) , " SampleSheets and ", length(runParameters), " runParameters files. One of each must be provided per run")
   }
   
-  #Parse files
+  # Parse all input samplesheets
   merged <- purrr::map2(SampleSheet, runParameters, parse_seqrun) %>%
     dplyr::bind_rows()
   
-  # Reformat to the format required
+  # Reformat to internal samplesheet format
   if (is.character(template) && template=="V4"){
     # Define template fields
     template_fields <- c("sample_id", "sample_name", "extraction_rep", "amp_rep", "client_name", 
@@ -1999,7 +1999,7 @@ create_samplesheet <- function(SampleSheet, runParameters, template = "V4"){
     stop("Error, only template='V4' or a user provided data framecurrently supported")
   }
   
-  # lookup table for renaming
+  # lookup table for renaming columns
   lookup <- c(i7_index = "index",
               i5_index = "index2",
               index_plate = "sample_plate",
@@ -2026,17 +2026,12 @@ parse_seqrun <- function(SampleSheet, runParameters){
   if (missing(runParameters)) {stop("Error: need to provide a runParameters file in .xml format")}
   if (missing(SampleSheet)) {stop("Error: need to provide a SampleSheet file in .csv format")}
   if (!length(SampleSheet) == length(runParameters)) {stop("Error: SampleSheet and RunParameters need to be provided for every run")}
-  #detect format for run
+  
+  #detect instrument used for run
   if(any(stringr::str_detect(readr::read_lines(runParameters), "MiSeq"))){
     format <- "miseq"
-    sampleskip <- 20
-    header_n_max <- 19
-    reads_skip <- 12
   } else if (any(stringr::str_detect(readr::read_lines(runParameters), "novaseq"))){
     format <- "novaseq"
-    sampleskip = 19
-    header_n_max = 18
-    reads_skip = 11
   } else if (any(stringr::str_detect(readr::read_lines(runParameters), "hiseq"))){
     format <- "hiseq"
     stop("Error: HiSeq not currently supported")
@@ -2049,8 +2044,16 @@ parse_seqrun <- function(SampleSheet, runParameters){
   } else(
     stop("Error: compatable platfrom not detected in runParameters file")
   )
+  
+  # Find positions of header and sample lines
+  lines <- readr::read_lines(SampleSheet)
+  #reads_line
+  data_start_line <- which(str_detect(lines, "^\\[Data\\]"))
+  header_end_line <- sample_start_line-1
+  reads_start_line <- which(str_detect(lines, "^\\[Reads\\]"))-1
+  
   # Read in samplesheet from run
-  sample_sheet <- readr::read_csv(SampleSheet, skip=sampleskip, col_types = cols(
+  sample_sheet <- readr::read_csv(SampleSheet, skip=data_start_line, col_types = cols(
     Sample_ID = col_character(),
     Sample_Name = col_character(),
     Sample_Plate = col_character(),
@@ -2062,31 +2065,32 @@ parse_seqrun <- function(SampleSheet, runParameters){
     Sample_Project = col_character()
   ))
   
-  withCallingHandlers({ # Handle Annoying missing columns function
-    sample_header <- readr::read_csv(SampleSheet, n_max=header_n_max) %>%
-      dplyr::select(1:2) %>%
-      magrittr::set_colnames(c("var", "value")) %>%
-      tidyr::drop_na(var) %>%
-      dplyr::mutate(var = var %>%
-                      str_replace_all("InvestigatorName", "Investigator_Name") %>% #Convert camel to snake case
-                      str_replace_all("ExperimentName", "Experiment_Name") %>%
-                      str_replace(" ", "_") %>%
-                      make.unique() %>%
-                      str_replace("\\.1", "_R")
-      ) %>%
-      tibble::column_to_rownames("var") %>%
-      t() %>%
-      tibble::as_tibble() %>%
-      dplyr::select_if(names(.) %in% c('Investigator_Name', 'Project_Name', 'Experiment_Name', 'Assay', 'Adapter'))
-    
-    reads <- readr::read_csv(SampleSheet, skip=reads_skip, n_max=2, col_types = cols_only(
-      `[Reads]` = col_number() )) %>%
-      pull(`[Reads]`)
-    reads <- tibble::tibble(for_read_length = reads[1], rev_read_length = reads[2])
-  },
-  warning=function(w) {if (startsWith(conditionMessage(w), "Missing column names"))
-    invokeRestart("muffleWarning")})
-  
+  # Extract relevent info from sample header and add to sample sheet
+  header_lines <- lines[1:header_end_line] %>%
+    stringr::str_remove(",,.*$")
+
+  sample_sheet$Investigator_Name <- if(any(str_detect(header_lines, "^Investigator Name"))){
+    header_lines[which(str_detect(header_lines, "^Investigator Name"))] %>% str_remove("^.*,")
+  } else {NA_character_}
+  sample_sheet$Project_Name <- if(any(str_detect(header_lines, "^Project Name"))){
+    header_lines[which(str_detect(header_lines, "^Project Name"))] %>% str_remove("^.*,")
+  } else {NA_character_}  
+  sample_sheet$Experiment_Name <- if(any(str_detect(header_lines, "^Experiment Name"))){
+    header_lines[which(str_detect(header_lines, "^Experiment Name"))] %>% str_remove("^.*,")
+  } else {NA_character_}  
+  sample_sheet$Assay <- if(any(str_detect(header_lines, "^Assay"))){
+    header_lines[which(str_detect(header_lines, "^Assay"))] %>% str_remove("^.*,")
+  } else {NA_character_}  
+  sample_sheet$Adapter <- if(any(str_detect(header_lines, "^Adapter"))){
+    header_lines[which(str_detect(header_lines, "^Adapter"))] %>% str_remove("^.*,")
+  } else {NA_character_} 
+  sample_sheet$for_read_length <- if(any(str_detect(header_lines, "^\\[Reads\\]"))){
+    header_lines[which(str_detect(header_lines, "^\\[Reads\\]"))+1] %>% str_remove("^.*,")
+  } else {NA_character_}
+  sample_sheet$rev_read_length <- if(any(str_detect(header_lines, "^\\[Reads\\]"))){
+    header_lines[which(str_detect(header_lines, "^\\[Reads\\]"))+2] %>% str_remove("^.*,") 
+  } else {NA_character_}  
+
   # Read runparameters xml
   xmlFromRunParameters <- XML::xmlParse(runParameters)
   run_params <- XML::xmlToDataFrame(nodes = XML::getNodeSet(xmlFromRunParameters, "/RunParameters")) %>%
@@ -2168,10 +2172,8 @@ parse_seqrun <- function(SampleSheet, runParameters){
     run_params <- dplyr::bind_cols(run_params, RFIDS)
   }
   
-  #Merge different sheets
+  #Combine merge run params into sample sheet
   combined <- sample_sheet %>%
-    cbind(sample_header) %>%
-    cbind(reads) %>%
     cbind(run_params)
   message("Combined sample sheets for: ")
   message(paste0(unique(combined[]$FCID)," ", format, "\n"))
