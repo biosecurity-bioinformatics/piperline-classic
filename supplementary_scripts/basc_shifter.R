@@ -4,6 +4,8 @@
 # Parse input arguments 
 options <- commandArgs(trailingOnly = TRUE)
 
+print(options)
+
 #library(renv)
 library(pak)
 library(targets)
@@ -63,6 +65,7 @@ params <- tibble(
   # General pipeline parameters
   threads = options[35],
 )
+print(params)
 
 write_csv(params, "sample_data/loci_params.csv")
 
