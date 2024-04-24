@@ -2049,7 +2049,7 @@ parse_seqrun <- function(SampleSheet, runParameters){
   lines <- readr::read_lines(SampleSheet)
   #reads_line
   data_start_line <- which(str_detect(lines, "^\\[Data\\]"))
-  header_end_line <- sample_start_line-1
+  header_end_line <- data_start_line-1
   reads_start_line <- which(str_detect(lines, "^\\[Reads\\]"))-1
   
   # Read in samplesheet from run
