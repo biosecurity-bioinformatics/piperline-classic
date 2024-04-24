@@ -11,4 +11,4 @@ source("R/functions.R")
 source("R/themes.R")
 
 # run pipeline
-tar_make(script = "_targets.R")
+tar_make(script = "_targets_nocrew.R")
