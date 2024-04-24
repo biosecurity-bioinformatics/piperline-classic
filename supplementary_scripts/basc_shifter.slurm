@@ -41,11 +41,14 @@ fi
 while [ $# -gt 0 ] ; do
   case $1 in
     --pcr_primers) pcr_primers="$2" ;;
+    --for_primer_seq) for_primer_seq="$2" ;;
+    --rev_primer_seq) rev_primer_seq="$2" ;;
     --target_gene) target_gene="$2" ;;
     --max_primer_mismatch) max_primer_mismatch="$2" ;;
     --read_min_length) read_min_length="$2" ;;
     --read_max_length) read_max_length="$2" ;;
     --read_max_ee) read_max_ee="$2" ;;
+    --read_trunc_length) read_trunc_length="$2" ;;
     --read_trim_left) read_trim_left="$2" ;;
     --read_trim_right) read_trim_right="$2" ;;
     --asv_min_length) asv_min_length="$2" ;;
@@ -79,8 +82,11 @@ done
 
 # Print parameters
 echo pcr_primers=$pcr_primers
+echo for_primer_seq=$for_primer_seq
+echo rev_primer_seq=$rev_primer_seq
 echo target_gene=$target_gene
 echo max_primer_mismatch=$max_primer_mismatch
+echo read_trunc_length=$read_trunc_length
 echo read_min_length=$read_min_length
 echo read_max_length=$read_max_length
 echo read_max_ee=$read_max_ee
@@ -122,6 +128,8 @@ module load shifter
 shifter --image jackscanlan/piperline:0.0.2 --env=R_LIBS_USER=/usr/local/lib/R/site-library \
 	Rscript ./R/basc_shifter.R \
   $pcr_primers \
+  $for_primer_seq \
+  $rev_primer_seq \
   $target_gene \
   $max_primer_mismatch \
   $read_min_length \
@@ -129,6 +137,7 @@ shifter --image jackscanlan/piperline:0.0.2 --env=R_LIBS_USER=/usr/local/lib/R/s
   $read_max_ee \
   $read_trim_left \
   $read_trim_right \
+  $read_trunc_length \
   $asv_min_length \
   $asv_max_length \
   $high_sensitivity \
