@@ -1,12 +1,16 @@
 
 # commands from: https://github.com/jackscanlan/piperline/blob/main/jack_notes/basc_run.md
 
+# Parse input arguments 
+options <- commandArgs(trailingOnly = TRUE)
+options
+
 #library(renv)
 library(pak)
 library(targets)
 library(tarchetypes)
 
-source("_targets_packages.R")
+source("_targets_packages_nocrew.R")
 source("R/functions.R")
 source("R/themes.R")
 
