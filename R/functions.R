@@ -2011,8 +2011,8 @@ create_samplesheet <- function(SampleSheet, runParameters, template = "V4"){
               seq_run_id = "run_id")
   
   matching <- merged %>%
-    janitor::clean_names()%>%
-    rename(any_of(lookup)) %>%
+    janitor::clean_names()%>% 
+    dplyr::rename(any_of(lookup)) %>%
     dplyr::select_if(names(.) %in% template_fields)
   matching[,setdiff(template_fields, colnames(matching))] <- NA
   out <- matching %>%
