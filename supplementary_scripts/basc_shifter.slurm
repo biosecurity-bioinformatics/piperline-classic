@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # The name of the job:
-#SBATCH --job-name="piperline.container_test"
+#SBATCH --job-name="piperline"
 
 # The project ID which this job should run under:
 #SBATCH --account="pathogens"
@@ -29,6 +29,10 @@
 
 # The maximum running time of the job in days-hours:mins:sec
 #SBATCH --time=7-0:0:00
+
+# Output errors and logs into same file
+#SBATCH --output=%x.%j.out
+#SBATCH --error=%x.%j.out
 
 # check that the script is launched with sbatch
 if [ "x$SLURM_JOB_ID" == "x" ]; then
@@ -81,6 +85,7 @@ while [ $# -gt 0 ] ; do
 done
 
 # Print parameters
+echo Parameters used for analysis:
 echo pcr_primers=$pcr_primers
 echo for_primer_seq=$for_primer_seq
 echo rev_primer_seq=$rev_primer_seq
@@ -125,6 +130,7 @@ module load shifter
 # shifterimg pull docker:jackscanlan/piperline:0.0.2
 
 # Run pipeline in shifter
+echo Running pipeline
 shifter --image jackscanlan/piperline:0.0.2 --env=R_LIBS_USER=/usr/local/lib/R/site-library \
 	Rscript ./supplementary_scripts/basc_shifter.R \
   $pcr_primers \
@@ -164,3 +170,6 @@ shifter --image jackscanlan/piperline:0.0.2 --env=R_LIBS_USER=/usr/local/lib/R/s
   $threads 
 
 exit
+
+# Output useful job stats
+/usr/local/bin/showJobStats.scr 

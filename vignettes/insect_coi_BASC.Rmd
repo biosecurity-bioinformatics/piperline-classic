@@ -147,8 +147,9 @@ The parameters for the run are parsed along with the slurm script.
 # Change 'folder-name' to the directory you are running the analysis in
 cd folder-name 
 
-# Submit slurm job
-sbatch supplementary_scripts/basc_shifter.slurm \
+# Submit slurm job - CHANGE EMAIL TO YOUR OWN EMAIL
+sbatch --mail-user=your.name@email.com \
+supplementary_scripts/basc_shifter.slurm \
   --pcr_primers fwhF2-fwhR2n \
   --for_primer_seq GGDACWGGWTGAACWGTWTAYCCHCC \
   --rev_primer_seq GTRATWGCHCCDGCTARWACWGG \
