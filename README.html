@@ -298,8 +298,8 @@ pre code {
   border-radius: 4px;
 }
 
-.tabset-dropdown > .nav-tabs > li.active:before {
-  content: "";
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
   font-family: 'Glyphicons Halflings';
   display: inline-block;
   padding: 10px;
@@ -307,16 +307,9 @@ pre code {
 }
 
 .tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
-  content: "";
-  border: none;
-}
-
-.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
-  content: "";
+  content: "\e258";
   font-family: 'Glyphicons Halflings';
-  display: inline-block;
-  padding: 10px;
-  border-right: 1px solid #ddd;
+  border: none;
 }
 
 .tabset-dropdown > .nav-tabs > li.active {
@@ -375,8 +368,14 @@ introduction to the pipeRline workflow</a></p>
 <ul>
 <li><p><a href="https://alexpiper.github.io/piperline/vignettes/insect_coi.html">Insect
 COI</a></p></li>
+<li><p><a href="https://alexpiper.github.io/piperline/vignettes/insect_coi_BASC.html">Insect
+COI on BASC HPC server</a></p></li>
 <li><p><a href="https://alexpiper.github.io/piperline/vignettes/tephritid.html">Tephritid
-metabarcoding</a></p></li>
+surveillance (COI + EIF3L)</a></p></li>
+<li><p><a href="https://alexpiper.github.io/piperline/vignettes/marine_surveillance.html">Marine
+surveillance (COI + 18S)</a></p></li>
+<li><p><a href="https://alexpiper.github.io/piperline/vignettes/fungal_bacterial.html">Bee
+health (16S + ITS)</a></p></li>
 </ul>
 </div>
 

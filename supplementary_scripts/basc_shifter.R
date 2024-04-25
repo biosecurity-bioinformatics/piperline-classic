@@ -1,21 +1,20 @@
 
-# commands from: https://github.com/jackscanlan/piperline/blob/main/jack_notes/basc_run.md
+# commands modified from: https://github.com/jackscanlan/piperline/blob/main/jack_notes/basc_run.md
 
 # Parse input arguments 
 options <- commandArgs(trailingOnly = TRUE)
-
-print(options)
 
 #library(renv)
 library(pak)
 library(targets)
 library(tarchetypes)
 
-source("_targets_packages_nocrew.R")
-source("R/functions.R")
-source("R/themes.R")
+suppressWarnings(suppressMessages(source("_targets_packages_nocrew.R")))
+suppressWarnings(suppressMessages(source("R/functions.R")))
+suppressWarnings(suppressMessages(source("R/themes.R")))
 
 # Params to add in step_add_parameters
+# Positions of arguments are handled by the SLURM script argument passing and should be consistent here
 params <- tibble(
   # Primer parameters
   pcr_primers = options[1],
@@ -65,7 +64,6 @@ params <- tibble(
   # General pipeline parameters
   threads = options[35],
 )
-print(params)
 
 write_csv(params, "sample_data/loci_params.csv")
 
