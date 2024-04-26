@@ -2768,7 +2768,7 @@ blast_top_hit <- function(query, db, type="blastn",
     dplyr::mutate(q_align = qend - qstart + 1) %>%
     dplyr::mutate(full_pident = (pident * length)/(length - q_align + qlen)) %>%
     dplyr::group_by(qseqid, sseqid, stitle, qstart, qend, length, full_pident)  %>%
-    slice(1)%>% # Handle rare cases where there are multiple identical matches within a single reference (I.e multiple 16s copies)
+    dplyr::slice(1)%>% # Handle rare cases where there are multiple identical matches within a single reference (I.e multiple 16s copies)
     ungroup() %>%
     dplyr::group_by(qseqid, sseqid, stitle) %>%
     group_modify(~{# Handle cases where there are multiple matches overlapping the one segment of a reference by picking the best one
