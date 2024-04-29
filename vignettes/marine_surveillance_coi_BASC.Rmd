@@ -1,6 +1,6 @@
 ---
 title: "PipeRline"
-subtitle: "BASC example using SLURM"
+subtitle: "Marine surveillance (COI only) on BASC"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
