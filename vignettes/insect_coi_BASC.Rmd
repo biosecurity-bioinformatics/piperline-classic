@@ -38,22 +38,21 @@ This workflow currently only works with insect COI sequencing using a single pri
 
 # Clone the pipeRline github repository
 
-The first step is to clone this github repository
-
 ```{bash}
-# Change into the main directory you wish to make the project in
-cd metabarcoding
+# Define the directory you will be running the analysis in
+working_dir=/group/pathogens/IAWS/Personal/Alexp/metabarcoding/marine_surveillance #CHANGE TO YOUR DIRECTORY
 
-# Clone the repository - Change 'folder-name' to the directory you are running the analysis in
-git clone https://github.com/alexpiper/piperline.git folder-name
-
+git clone https://github.com/alexpiper/piperline.git $working_dir
+cd $working_dir
 ```
+
 
 ## Updating the pipeline
 
 To update to the latest version of the pipeline, run the below code in the terminal.
 
 ```{bash}
+cd $working_dir
 git pull
 
 # if an error occurs, run:
@@ -94,28 +93,29 @@ ulimit -n 4000
 
 #Set up input and outputs
 inputdir=/group/sequencing/210219_M03633_0489_000000000-JDYG3 #CHANGE TO YOUR SEQ RUN
-outputdir=/group/pathogens/IAWS/Projects/Metabarcoding/dros_surveillance/data/JDYG3 #CHANGE TO YOUR DATA FOLDER RUN
-samplesheet=/group/pathogens/IAWS/Projects/Metabarcoding/dros_surveillance/SampleSheet_JDYG3.csv #CHANGE TO YOUR SAMPLESHEET
+
+fcid=$(echo $input_dir | sed 's/^.*-//')
+outputdir=$working_dir/data/$fcid
+samplesheet=$input_dir/SampleSheet.csv
 
 # convert samplesheet to unix format
 dos2unix $samplesheet
 
 #Demultiplex
-bcl2fastq -p 12 --runfolder-dir $inputdir \
+bcl2fastq -p 12 --runfolder-dir $input_dir \
 --output-dir $outputdir \
 --sample-sheet $samplesheet \
 --no-lane-splitting --barcode-mismatches 1
 
 # Copy other necessary files and move fastqs
 cd $outputdir
-cp -r $inputdir/InterOp $outputdir
-cp $inputdir/RunInfo.xml $outputdir
-cp $inputdir/[Rr]unParameters.xml $outputdir
+cp -r $input_dir/InterOp $outputdir
+cp $input_dir/RunInfo.xml $outputdir
+cp $input_dir/[Rr]unParameters.xml $outputdir
 cp $samplesheet $outputdir
 mv **/*.fastq.gz $outputdir
 
 # Append fcid to start of sample names if missing
-fcid=$(echo $inputdir | sed 's/^.*-//')
 for i in *.fastq.gz; do
   if ! [[ $i == $fcid* ]]; then
   new=$(echo ${fcid} ${i}) #append together
@@ -136,16 +136,18 @@ Reference databases are stored in the referencedata directory on BASC
 
 ```{bash}
 # Change 'folder-name' to the directory you are running the analysis in
-cp /group/referencedata/mspd-db/metabarcoding/arthropod/imappests_coi_18_08_2020/* folder-name/reference/.
+cp /group/referencedata/mspd-db/metabarcoding/arthropod/imappests_coi_18_08_2020/* $working_dir/reference/.
 ```
 
 # Submit job with parameters
 
 The parameters for the run are parsed along with the slurm script.
 
+if you wish to use multiple values (i.e. multiple reference databases, multiple primers per index) encapsulate them in a '' and seperate them with a ;
+
 ```{bash}
 # Change 'folder-name' to the directory you are running the analysis in
-cd folder-name 
+cd $working_dir
 
 # Submit slurm job - CHANGE EMAIL TO YOUR OWN EMAIL
 sbatch --mail-user=your.name@email.com \
