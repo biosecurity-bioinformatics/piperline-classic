@@ -8,7 +8,7 @@ The best place to start is going through the [General introduction to the pipeRl
 Project specific workflows:
 
 
-** Workflows for local pc **
+**Workflows for local PC:**
 * [Insect COI](https://alexpiper.github.io/piperline/vignettes/insect_coi.html)
 
 * [Tephritid surveillance (COI + EIF3L)](https://alexpiper.github.io/piperline/vignettes/tephritid.html)
@@ -18,7 +18,7 @@ Project specific workflows:
 * [Bee health (16S + ITS)](https://alexpiper.github.io/piperline/vignettes/fungal_bacterial.html)
 
  
-** Workflows for BASC HPC **
+**Workflows for BASC HPC:**
 
 * [Insect COI on BASC HPC server](https://alexpiper.github.io/piperline/vignettes/insect_coi_BASC.html)
  
