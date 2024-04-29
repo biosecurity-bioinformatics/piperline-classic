@@ -141,9 +141,9 @@ shifter --image jackscanlan/piperline:0.0.2 --env=R_LIBS_USER=/usr/local/lib/R/s
   $read_min_length \
   $read_max_length \
   $read_max_ee \
+  $read_trunc_length \
   $read_trim_left \
   $read_trim_right \
-  $read_trunc_length \
   $asv_min_length \
   $asv_max_length \
   $high_sensitivity \
