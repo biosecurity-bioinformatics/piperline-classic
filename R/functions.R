@@ -1464,7 +1464,8 @@ step_blast_tophit <- function(seqtab, output=NULL, qc_dir, database, identity = 
     blast_spp <- blast_assign_species(query=seqs,db=database, identity=97, coverage=95, evalue=1e06,
                                       max_target_seqs=5, max_hsp=5, ranks=ranks, delim=";") %>%
       dplyr::rename(blast_genus = Genus, blast_spp = Species) %>%
-      dplyr::filter(!is.na(blast_spp)) 
+      dplyr::filter(!is.na(blast_spp))%>%
+      ungroup()
     
     if(nrow(blast_spp) > 0){
       # Transform into taxtab format
