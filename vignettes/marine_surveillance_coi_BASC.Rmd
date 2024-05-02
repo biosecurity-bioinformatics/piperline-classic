@@ -1,6 +1,6 @@
 ---
 title: "PipeRline"
-subtitle: "BASC example using SLURM"
+subtitle: "Marine surveillance (COI only) on BASC"
 author: "A.M. Piper"
 date: "`r Sys.Date()`"
 output:
@@ -34,7 +34,7 @@ opts_chunk$set(dev = 'png')
 
 The below code is written for the Agriculture Victoria BASC computing cluster.
 
-This workflow currently only works with insect COI sequencing using a single primer set
+This workflow is designed for the marine surveillance project using the mlCOIintF-jgHCO2198 COI primer set
 
 # Clone the pipeRline github repository
 
@@ -46,13 +46,11 @@ git clone https://github.com/alexpiper/piperline.git $working_dir
 cd $working_dir
 ```
 
-
 ## Updating the pipeline
 
-To update to the latest version of the pipeline, run the below code in the terminal.
+IF you already have the pipeline cloned and wish to update to the latest version, run the below code in the terminal.
 
 ```{bash}
-cd $working_dir
 git pull
 
 # if an error occurs, run:
@@ -60,22 +58,6 @@ git stash
 git pull
 ```
 
-
-# Prior to analysis
-The PipeRline workflow assumes that your sequencing data meets certain criteria:
-
-1. Samples have been demultiplexed, i.e. split into individual per-sample fastq files. If you want the pipeline to calculate the index-switching rate, the fastq files need to be re-demultiplexed as the miseq does not put indexes in fasta headers by default
-2. For paired-end sequencing data, the forward and reverse reads are in separate files (ie. not interleaved) with reads arranged in matched order.
-
-The output directory should be unique for each sequencing run, named as the flowcell id, within a directory called data
-
-For example:
-
-    root/
-      ├── data/
-         ├── CJL7D/
-         
-         
 # Demultiplex MiSeq run
 
 For this workflow to run, we will need some sequencing runs to work with. If you are working with MiSeq data, it is recommended that the data is demultiplexed again using bcl2fastq, as the miseq does not put indexes in fasta headers by default which is required for the index swtiching calculation.
@@ -92,7 +74,7 @@ ulimit -n 4000
 ###Run1
 
 #Set up input and outputs
-inputdir=/group/sequencing/210219_M03633_0489_000000000-JDYG3 #CHANGE TO YOUR SEQ RUN
+input_dir=/group/sequencing/240426_M01054_0007_000000000-LJRVM #CHANGE TO YOUR SEQ RUN
 
 fcid=$(echo $input_dir | sed 's/^.*-//')
 outputdir=$working_dir/data/$fcid
@@ -126,17 +108,17 @@ done
 
 ```
 
-# Reference databases 
-
-The pipeRline workflow uses the [IDTAXA](https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-018-0521-5) and BLAST software to assign taxonomy to the sequence reads. These require a pre-trained IDTAXA model, and a fasta file with heirarchial taxonomy. For insects, these 
-
 ## Copy reference databases
 
 Reference databases are stored in the referencedata directory on BASC
 
+The Marine surveillance workflow first assigns ASVs against an internal database, then anything that remains unidentified to species is then assigned against a broader scope MARES database
+
 ```{bash}
 # Change 'folder-name' to the directory you are running the analysis in
-cp /group/referencedata/mspd-db/metabarcoding/arthropod/imappests_coi_18_08_2020/* $working_dir/reference/.
+cp /group/referencedata/mspd-db/metabarcoding/marine/COI_deakin/* $working_dir/reference/.
+cp /group/referencedata/mspd-db/metabarcoding/marine/COI_mares/* $working_dir/reference/.
+
 ```
 
 # Submit job with parameters
@@ -146,46 +128,46 @@ The parameters for the run are parsed along with the slurm script.
 if you wish to use multiple values (i.e. multiple reference databases, multiple primers per index) encapsulate them in a '' and seperate them with a ;
 
 ```{bash}
-# Change 'folder-name' to the directory you are running the analysis in
-cd $working_dir
+
+cd $working_dir 
 
 # Submit slurm job - CHANGE EMAIL TO YOUR OWN EMAIL
 sbatch --mail-user=your.name@email.com \
 supplementary_scripts/basc_shifter.slurm \
-  --pcr_primers fwhF2-fwhR2n \
-  --for_primer_seq GGDACWGGWTGAACWGTWTAYCCHCC \
-  --rev_primer_seq GTRATWGCHCCDGCTARWACWGG \
+  --pcr_primers mlCOIintF-jgHCO2198 \
+  --for_primer_seq GGWACWGGWTGAACWGTWTAYCCYCC \
+  --rev_primer_seq TAIACYTCIGGRTGICCRAARAAYCA \
   --target_gene COI \
   --max_primer_mismatch 0 \
   --read_min_length 20 \
   --read_max_length Inf \
   --read_max_ee 1 \
-  --read_trunc_length 150 \
+  --read_trunc_length 224 \
   --read_trim_left 0 \
   --read_trim_right 0 \
-  --asv_min_length 195 \
-  --asv_max_length 215 \
+  --asv_min_length 303 \
+  --asv_max_length 323 \
   --high_sensitivity TRUE \
   --concat_unmerged FALSE \
   --genetic_code SGC4 \
   --coding TRUE \
-  --phmm reference/folmer_fullength_model.rds \
-  --idtaxa_db reference/idtaxa_bftrimmed.rds \
-  --ref_fasta reference/insecta_hierarchial_bftrimmed.fa.gz \
+  --phmm NA \
+  --idtaxa_db 'reference/COI_taxreturnmodel_idtaxa.rds;reference/mares_COI_taxreturnmodel_idtaxa.rds' \
+  --ref_fasta 'reference/COI_taxreturnmodel_hierarchial.fa.gz;reference/mares_COI_taxreturnmodel_hierarchial.fa.gz' \
   --idtaxa_confidence 60 \
   --run_blast TRUE \
   --blast_min_identity 97 \
   --blast_min_coverage 90 \
-  --target_kingdom Metazoa \
-  --target_phylum Arthropoda \
+  --target_kingdom NA \
+  --target_phylum NA \
   --target_class NA \
   --target_order NA \
   --target_family NA \
   --target_genus NA \
   --target_species NA \
-  --min_sample_reads 1000 \
-  --min_taxa_reads NA \
-  --min_taxa_ra 1e-4 \
+  --min_sample_reads 0 \
+  --min_taxa_reads 0 \
+  --min_taxa_ra 0 \
   --threads 1
 
 ```

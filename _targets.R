@@ -139,6 +139,11 @@ list(
                               msg = "All samples must have a for_primer_seq in the sample_info.csv file")
       assertthat::assert_that(all(is.character(samdf_checked$rev_primer_seq)) & all(!is.na(samdf_checked$rev_primer_seq)),
                               msg = "All samples must have a rev_primer_seq in the sample_info.csv file")
+      
+      # Check that there are no duplicated sample_ids
+      assertthat::assert_that(all(!duplicated(samdf_checked$sample_id)),
+                              msg = paste0("Duplicate sample ids: ", paste(samdf_checked$sample_id[duplicated(samdf_checked$sample_id)], collapse=" "), " in samplesheet"))
+      
       return(samdf_checked)
     }),
   

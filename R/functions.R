@@ -1391,19 +1391,19 @@ step_idtaxa <- function(seqtab, qc_dir, database, threshold = 60, multithread=FA
       tax <- new_bind(tibble::tibble(!!!ranks, .rows = 0, .name_repair = ~ ranks), tax)
     } else {
       warning(paste0("No sequences assigned with IDTAXA to ", database, " have you used the correct database?"))
-      tax <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") 
+      tax <- data.frame(matrix(ncol = length(ranks), nrow = length(getSequences(seqtab))))
+      rownames(tax) <- getSequences(seqtab)
+      colnames(tax) <- ranks
       tax[ranks[1]] <- ranks[1]
       tax[ranks[2:length(ranks)]] <- NA_character_
-      tax <- tax %>%
-        magrittr::set_rownames(getSequences(seqtab)) 
     }
   } else {
     warning(paste0("No sequences present in seqtab - IDTAXA skipped"))
-    tax <- tibble::enframe(getSequences(seqtab), name=NULL, value="OTU") 
+    tax <- data.frame(matrix(ncol = length(ranks), nrow = length(getSequences(seqtab))))
+    rownames(tax) <- getSequences(seqtab)
+    colnames(tax) <- ranks
     tax[ranks[1]] <- ranks[1]
     tax[ranks[2:length(ranks)]] <- NA_character_
-    tax <- tax %>%
-      magrittr::set_rownames(getSequences(seqtab)) 
   }
   # Check that output dimensions match input
   if(!all(rownames(tax) %in% colnames(seqtab))){

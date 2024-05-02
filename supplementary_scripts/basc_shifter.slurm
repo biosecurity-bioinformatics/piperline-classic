@@ -24,9 +24,6 @@
 # ends successfully
 #SBATCH --mail-type=END
 
-# Use this email address:
-#SBATCH --mail-user=alexander.piper@agriculture.vic.gov.au
-
 # The maximum running time of the job in days-hours:mins:sec
 #SBATCH --time=7-0:0:00
 
