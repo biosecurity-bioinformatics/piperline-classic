@@ -1551,7 +1551,7 @@ step_join_tax_blast <- function(tax, blast_spp, output=NULL, propagate_tax=FALSE
     blast_spp[,2][disagreements] <- NA
     
     # Join the two taxonomies, prefering names from the tax
-    tax_blast <- coalesce_tax(tax, blast_spp)
+    tax_blast <- coalesce_tax(tax, blast_spp, prefer="left")
   
     if(propagate_tax){
       tax_blast <- tax_blast %>%

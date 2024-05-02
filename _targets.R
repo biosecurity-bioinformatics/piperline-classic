@@ -977,15 +977,21 @@ tar_target(idtaxa_path, {
                                         unique() %>%
                                         basename() %>% 
                                         stringr::str_remove("\\..*$")
-                                      taxtabs <- idtaxa_path[stringr::str_detect(idtaxa_path, idtaxa_dbs)& stringr::str_detect(idtaxa_path, paste0(..2, "_",..3,"_"))] %>%
-                                        purrr::map(readRDS)
+                                      # Read in idtaxa assignments -  Handle multiple input dbs
+                                      taxtabs <- purrr::map(idtaxa_dbs, function(x){
+                                        idtaxa_path[stringr::str_detect(idtaxa_path, paste0(..2, "_",..3,"_", x))] %>%
+                                          readRDS() 
+                                      })
+                                      
+                                      # Merge multiple taxtabs if multiple databases were used - preffering assignments in the order the databases were input
+                                      # Handles maximum 3 databases currently
                                       if(length(taxtabs) == 1){
                                         out <- taxtabs[[1]]
                                       } else if(length(taxtabs) == 2){
-                                        out <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
+                                        out <- coalesce_tax(taxtabs[[1]], taxtabs[[2]], prefer="left")
                                       } else if(length(taxtabs) == 3){
-                                        temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
-                                        out <- coalesce_tax(temptax, taxtabs[[3]])
+                                        temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]], prefer="left")
+                                        out <- coalesce_tax(temptax, taxtabs[[3]], prefer="left")
                                       }
                                       # Check that output dimensions match input
                                       if(!all(rownames(out) %in% colnames(..4))){
@@ -1001,15 +1007,22 @@ tar_target(idtaxa_path, {
                                         unique() %>%
                                         basename() %>% 
                                         stringr::str_remove("\\..*$")
-                                      taxtabs <- tax_blast_path[stringr::str_detect(tax_blast_path, ref_fastas) & stringr::str_detect(tax_blast_path, paste0(..2, "_",..3,"_"))]%>%
-                                        purrr::map(readRDS)
+                                      
+                                      # Read in blast assignments Handle multiple input dbs
+                                      taxtabs <- purrr::map(ref_fastas, function(x){
+                                        tax_blast_path[stringr::str_detect(tax_blast_path, paste0(..2, "_",..3,"_", x))] %>%
+                                          readRDS() 
+                                      })
+                                      
+                                      # Merge multiple taxtabs if multiple databases were used - preffering assignments in the order the databases were input
+                                      # Handles maximum 3 databases currently
                                       if(length(taxtabs) == 1){
                                         out <- taxtabs[[1]]
                                       } else if(length(taxtabs) == 2){
-                                        out <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
+                                        out <- coalesce_tax(taxtabs[[1]], taxtabs[[2]], prefer="left")
                                       } else if(length(taxtabs) == 3){
-                                        temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]])
-                                        out <- coalesce_tax(temptax, taxtabs[[3]])
+                                        temptax <- coalesce_tax(taxtabs[[1]], taxtabs[[2]], prefer="left")
+                                        out <- coalesce_tax(temptax, taxtabs[[3]], prefer="left")
                                       }
                                       # Check that output dimensions match input
                                       if(!all(rownames(out) %in% colnames(..4))){
