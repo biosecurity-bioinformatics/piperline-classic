@@ -74,7 +74,8 @@ step_check_files <- function(samdf, files, col_name=NULL){
       filter(!sample_id %in% setdiff(samdf$sample_id, namecheck))
   }
   
-  # Hash the file to make sure they havent changed
+  # Hash the file to make sure they haven't changed
+  # This is a workaround as targets doesn't seem to be accurately tracking this
   fwd_col_name = paste0(col_name, "_fwd")
   rev_col_name = paste0(col_name, "_rev")
   out <- samdf %>%
@@ -82,13 +83,21 @@ step_check_files <- function(samdf, files, col_name=NULL){
       str_to_check <- basename(fastqFs) %>%
         stringr::str_remove(pattern = "^(.*)\\/") %>%
         stringr::str_remove(pattern = "(?:.(?!_S))+$")
-      rlang::hash_file(fastqFs[str_to_check==.x])
+      fastq_file <- fastqFs[str_to_check==.x]
+      if(length(fastq_file) > 1){
+        stop(paste0("FASTQ files have duplicate names: '", paste(fastq_file, collapse = ", "), "' the name before the _S must be unique!"))
+      }
+      rlang::hash_file(fastq_file)
     }))%>%
     mutate(!!rev_col_name := purrr::map_chr(sample_id,~{
       str_to_check <- basename(fastqRs) %>%
         stringr::str_remove(pattern = "^(.*)\\/") %>%
         stringr::str_remove(pattern = "(?:.(?!_S))+$")
-      rlang::hash_file(fastqRs[str_to_check==.x])
+      fastq_file <- fastqRs[str_to_check==.x]
+      if(length(fastq_file) > 1){
+        stop(paste0("FASTQ files have duplicate names: '", paste(fastq_file, collapse = ", "), "' the name before the _S must be unique!"))
+      }
+      rlang::hash_file(fastq_file)
     }))
   return(out)
 }
