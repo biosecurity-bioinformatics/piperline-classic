@@ -56,16 +56,27 @@ step_check_files <- function(samdf, files, col_name=NULL){
   fastqFs <- files[stringr::str_detect(files, "_R1_")]
   fastqRs <- files[stringr::str_detect(files, "_R2_")]
   
-  # Get file name to check
+  # Get file names to check
   namecheck <- basename(fastqFs) %>%
     stringr::str_remove(pattern = "^(.*)\\/") %>%
     stringr::str_remove(pattern = "(?:.(?!_S))+$")
   namecheck <- namecheck[!stringr::str_detect(namecheck, "Undetermined")]
   
-  #Check missing in samplesheet
+  namecheckR <- basename(fastqRs) %>%
+    stringr::str_remove(pattern = "^(.*)\\/") %>%
+    stringr::str_remove(pattern = "(?:.(?!_S))+$")
+  namecheckR <- namecheckR[!stringr::str_detect(namecheckR, "Undetermined")]
+  
+
+  #Check that R1s and R2s exist for all
+  if (length(setdiff(namecheck, namecheckR)) > 0) {
+    stop("The samples: ", setdiff(namecheck, namecheckR), " do not have forward and reverse read files")
+  }
+  
+  #Drop any fastq files that arent present in sample sheet
   if (length(setdiff(namecheck, samdf$sample_id)) > 0) {warning("The fastq file/s: ", setdiff(namecheck, samdf$sample_id), " are not in the sample sheet") }
   
-  #Check missing fastqs
+  #Drop any sample names that dont have fastq files
   if (length(setdiff(samdf$sample_id, namecheck)) > 0) {
     warning(paste0("The fastq file: ",
                    setdiff(samdf$sample_id, namecheck),
