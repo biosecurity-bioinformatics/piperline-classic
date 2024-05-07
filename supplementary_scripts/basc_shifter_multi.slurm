@@ -10,8 +10,8 @@
 #SBATCH --partition="batch"
 
 # Maximum number of tasks/CPU cores used by the job:
+### --cpus-per-task must be set in command line if you want control over pipeline parameters too
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
 
 # The total amount of memory in megabytes in the job:
 #SBATCH --mem=40GB
